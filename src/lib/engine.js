@@ -106,6 +106,22 @@ export function entryShape({ focusedSince, at, graceMs, marginMs }) {
   return 'ambiguous';
 }
 
+/**
+ * Does a rule apply to this entry shape?
+ *
+ * `any` exists because most host rules genuinely mean both: an internal team
+ * tool belongs in the same container whether you typed its address or a
+ * colleague sent you a link. Without it every such rule has to be written
+ * twice, and a pair of rules that drifts apart is precisely the class of bug
+ * this extension exists to prevent.
+ *
+ * It is still EXPLICIT — there is no default scope — because the thing worth
+ * refusing is a rule whose author never thought about the question.
+ */
+function inScope(rule, shape) {
+  return rule?.scope === shape || rule?.scope === 'any';
+}
+
 /** The bare-host pin the compiler refuses; refused again here, in depth. */
 function isBareAuthPin(rule, authHosts) {
   return typeof rule?.match?.host === 'string' && onAnyHost(rule.match.host, authHosts);
@@ -205,7 +221,7 @@ function ladder(input, ctx) {
   // --- RUNG 4 — entry rules (first match, compiler-ordered) ----------------
   const rules = Array.isArray(config.rules) ? config.rules : [];
   const match = rules.find(
-    (r) => r?.scope === shape && ruleMatches(r, url, host) && !isBareAuthPin(r, config.authHosts),
+    (r) => inScope(r, shape) && ruleMatches(r, url, host) && !isBareAuthPin(r, config.authHosts),
   );
 
   const hints = usableHints(input.bookmarkHits, host, config);
@@ -214,7 +230,11 @@ function ladder(input, ctx) {
     // Asking on an outside hand-off is linkward's monopoly. The compiler
     // refuses this config; the engine refuses it again, in depth.
     if (match.to === 'ask') {
-      if (shape === 'external') return leave(RUNG.RULE, 'ask-not-allowed-on-external');
+      // Only an INTERNAL rule may ask. `any` includes outside links, and those
+      // belong to linkward — two pickers on one territory is the confirm-page
+      // race, rebuilt deliberately out of our own parts. The compiler refuses
+      // this config; the engine refuses it again, in depth.
+      if (match.scope !== 'internal') return leave(RUNG.RULE, 'ask-not-allowed-on-external');
       return ask(containers, match.id, hints[0]?.container);
     }
     const target = (containers ?? []).find((c) => c.name === match.to);

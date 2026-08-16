@@ -161,15 +161,23 @@ First match over a **compiler-ordered** list. The extension does no sorting:
 ordering is a property of the compiled artefact, so the order the verifier tests
 is byte-identically the order the browser executes.
 
-Two disjoint scopes:
+Three scopes, all of them written down — there is no default, because the thing
+worth refusing is a rule whose author never considered the question:
 
 - `scope: 'external'` — hand-offs from outside the browser. The deterministic
   outside routes live here.
 - `scope: 'internal'` — entries begun inside the browser.
+- `scope: 'any'` — both. Most ordinary host rules mean this: a team tool belongs
+  in the same container whether you typed its address or a colleague sent you a
+  link. Without it every such rule is written twice, and a pair of rules that
+  drifts apart is exactly the class of bug this extension exists to prevent.
+  It means either **shape**, not "even when we cannot tell" — the ambiguity band
+  still resolves to silence.
 
-**Asking is not available to external rules at all.** The compiler refuses
-`scope:'external'` with `to:'ask'`: prompting on outside links is linkward's
-monopoly, and two pickers on one territory is F2 rebuilt by hand.
+**Only an `internal` rule may ask.** The compiler refuses `to: 'ask'` on
+`external` and on `any`, and the engine refuses it again: prompting on outside
+links is linkward's monopoly, and two pickers on one territory is F2 rebuilt by
+hand.
 
 **`A11` Suppressed bookmark hints are surfaced.** When a rule outranks a bookmark
 hint the outcome is unchanged but reported: `rule <id> overrode bookmark hint

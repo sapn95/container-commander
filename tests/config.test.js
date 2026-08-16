@@ -68,6 +68,19 @@ describe('what the compiler refuses to let through', () => {
     expect(r.errors.join(' ')).toMatch(/claim/i);
   });
 
+  it('accepts an explicit scope of "any", which most host rules mean', () => {
+    const r = ok({
+      rules: [{ id: 'x', scope: 'any', match: { host: 'example.com' }, to: 'work' }],
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('refuses an "any" rule that asks, because any includes outside links', () => {
+    const r = ok({ rules: [{ id: 'x', scope: 'any', match: { host: 'example.com' }, to: 'ask' }] });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join(' ')).toMatch(/only an internal rule may ask/i);
+  });
+
   it('refuses a rule with no scope, rather than guessing one', () => {
     const r = ok({ rules: [{ id: 'x', match: { host: 'example.com' }, to: 'work' }] });
     expect(r.ok).toBe(false);

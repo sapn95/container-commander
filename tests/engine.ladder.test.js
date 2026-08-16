@@ -213,6 +213,49 @@ describe('RUNG 4 — entry rules', () => {
   });
 });
 
+describe('RUNG 4 — a rule that means both', () => {
+  // Most host rules genuinely mean both: a team tool belongs in the same
+  // container whether you typed its address or a colleague sent you a link.
+  // Without `any` every such rule is written twice, and a pair that drifts
+  // apart is exactly the class of bug this extension exists to prevent.
+  const both = config({ rules: [rule({ scope: 'any', to: 'work' })] });
+
+  it('fires on an outside hand-off', () => {
+    expect(decide(situation({ config: both }))).toMatchObject({
+      action: 'reopen',
+      cookieStoreId: WORK,
+    });
+  });
+
+  it('fires on an entry begun inside the browser', () => {
+    expect(decide(insideBrowser({ config: both }))).toMatchObject({
+      action: 'reopen',
+      cookieStoreId: WORK,
+    });
+  });
+
+  it('still does nothing in the ambiguity band', () => {
+    // `any` means either SHAPE, not "even when we cannot tell".
+    const band = situation({ focus: { focusedSince: NOW - (GRACE + 100) }, config: both });
+    expect(decide(band).action).toBe('leave');
+  });
+
+  it('is still beaten by a claim', () => {
+    const d = decide(
+      situation({
+        claims: { pendingMatch: { cookieStoreId: ADMIN, sender: 'beeline@sapn95.github.io' } },
+        config: both,
+      }),
+    );
+    expect(d).toMatchObject({ action: 'leave', rung: 1 });
+  });
+
+  it('may not ask, because "any" includes outside links', () => {
+    const asking = config({ rules: [rule({ scope: 'any', to: 'ask' })] });
+    expect(decide(insideBrowser({ config: asking })).action).not.toBe('ask');
+  });
+});
+
 describe('RUNG 5 — ask', () => {
   it('asks when an internal rule explicitly says to', () => {
     const cfg = config({ rules: [rule({ scope: 'internal', to: 'ask' })] });

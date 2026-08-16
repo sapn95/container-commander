@@ -5,8 +5,9 @@
 ## Decision
 
 Commander has no prompt surface for links arriving from outside the browser.
-The compiler **refuses** `scope: 'external'` combined with `to: 'ask'`. That
-territory belongs to linkward.
+Only a rule scoped `internal` may ask: the compiler refuses `to: 'ask'` on both
+`external` and `any` — `any` includes outside links — and the engine refuses it
+again at rung 4. That territory belongs to linkward.
 
 ## Why
 
