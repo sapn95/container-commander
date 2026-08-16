@@ -57,10 +57,12 @@ export function validateConfig(raw) {
     else if (seen.has(rule.id)) errors.push(`${at}: duplicate id "${rule.id}"`);
     else seen.add(rule.id);
 
-    // No default scope. Guessing one is how a rule meant for outside hand-offs
-    // starts firing on things done inside the browser.
-    if (rule.scope !== 'external' && rule.scope !== 'internal') {
-      errors.push(`${at}: scope must be "external" or "internal"`);
+    // No DEFAULT scope. Guessing one is how a rule meant for outside hand-offs
+    // starts firing on things done inside the browser. `any` is allowed but
+    // must be written down: the thing worth refusing is a rule whose author
+    // never considered the question, not one who answered "both".
+    if (!['external', 'internal', 'any'].includes(rule.scope)) {
+      errors.push(`${at}: scope must be "external", "internal" or "any"`);
     }
 
     if (!isString(rule.to)) errors.push(`${at}: missing to`);
@@ -68,8 +70,9 @@ export function validateConfig(raw) {
     // Asking on an outside hand-off is linkward's monopoly. Two pickers on one
     // territory is the confirm-page race, rebuilt deliberately out of our own
     // parts.
-    if (rule.scope === 'external' && rule.to === 'ask') {
-      errors.push(`${at}: an external rule may not ask — that is linkward's`);
+    // `any` includes external, so it may not ask either.
+    if (rule.scope !== 'internal' && rule.to === 'ask') {
+      errors.push(`${at}: only an internal rule may ask — outside links are linkward's`);
     }
 
     const m = rule.match;
