@@ -93,6 +93,26 @@ who owns a link.
 
 Who tells whom, so no cooperating extension ever asks about another's tab:
 
+```mermaid
+sequenceDiagram
+    participant B as beeline
+    participant C as commander
+    participant L as linkward
+    participant FF as Firefox
+
+    Note over B,L: every claim goes out BEFORE the tab exists
+    B->>C: cc:claim (url, container)
+    B->>L: cc:claim (url, container)
+    C-->>B: ok
+    L-->>B: ok
+    B->>FF: tabs.create
+    FF->>C: onBeforeRequest
+    Note right of C: claim consumed at rung 1<br/>no rule is read at all
+    C-->>FF: leave it alone
+    B->>C: cc:opened (tabId)
+    Note over C,L: and when COMMANDER reopens a tab<br/>it claims it too, or linkward would<br/>offer a picker for commander's own answer
+```
+
 | Sender    | Recipients                            |
 | --------- | ------------------------------------- |
 | beeline   | commander, linkward                   |

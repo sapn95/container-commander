@@ -1,11 +1,42 @@
 # Architecture
 
 The design after a three-way panel, two judges, and four adversarial passes that
-found twenty-one breaks. Everything marked **[Ax]** is a repair applied to the
+found twenty-one breaks. Everything marked **`Ax`** is a repair applied to the
 winning design because an attack broke it; the attack is named so the reason
 survives the next person who thinks the clause is redundant.
 
 ---
+
+## 0. The ladder, at a glance
+
+Read downwards. The first rung that answers, answers — and the ones above the
+rules answer without reading config at all, which is what makes a redirect
+structurally unable to meet a rule.
+
+```mermaid
+flowchart TD
+    R["main_frame request"] --> G{"GATE 0<br/>GET, http(s), fresh,<br/>not yet decided?"}
+    G -->|no| L["Leave alone"]
+    G -->|yes| C{"RUNG 1<br/>Did a peer claim<br/>this tab?"}
+    C -->|yes| L
+    C -->|no| I{"RUNG 2<br/>Origin, opener, or a<br/>container chosen by hand?"}
+    I -->|yes| L
+    I -->|no| S{"RUNG 3<br/>Entry shape?"}
+    S -->|ambiguous| L
+    S -->|"external / internal"| M{"RUNG 4<br/>A rule of that scope,<br/>matching?"}
+    M -->|no| B{"A bookmark hint,<br/>internal entry only?"}
+    B -->|no| L
+    B -->|yes| O["Reopen there"]
+    M -->|"to: container"| O
+    M -->|"to: ask (internal only)"| A["RUNG 5<br/>Ask"]
+
+    style O fill:#2f6feb,color:#fff
+    style A fill:#2f6feb,color:#fff
+    style L fill:#8080801f,color:#8a8f98
+```
+
+Rungs 1 and 2 are the whole of the failure catalogue. Everything below them is
+ordinary configuration.
 
 ## 1. The single decision point
 
@@ -71,7 +102,7 @@ A cooperating extension announced ownership of a tab **before creating it**.
 - TTL is evaluated lazily at consume time. No timers: a timer in an event page is
   a promise the platform does not keep.
 
-**[A5][A9] Claims are awaited in every direction.** The original design had only
+**`A5` `A9` Claims are awaited in every direction.** The original design had only
 the launcher awaiting its claim reply. If a claim message loses a race against
 the navigation it describes, a rule can shadow a claim — which is failure F4
 returning through the front door. So: _no `tabs.create` may be issued before the
@@ -90,7 +121,7 @@ Leave alone, **without reading config**, if any of:
   every redirect, every link click, every form post, and therefore every hop of
   every sign-in flow after the first.
 - an `openerTabId` is present.
-- **[A19][A20]** the tab's `cookieStoreId` is already a **non-default container**
+- **`A19` `A20`** the tab's `cookieStoreId` is already a **non-default container**
   and no claim was consumed. Opening "New Container Tab → admin" by hand and
   typing an address is provenance too — the strongest kind, a human gesture. A
   rule silently reopening that tab elsewhere is the same insult as F1.
@@ -114,7 +145,7 @@ navigation. Classify it via the vendored `startedInsideBrowser()` — the focus
 clock from linkward, where every focus _gain_ restarts the clock, because the
 _loss_ of focus is the half neither browser reports reliably.
 
-**[A17] The ambiguity band.** linkward and commander both classify entries, and
+**`A17` The ambiguity band.** linkward and commander both classify entries, and
 if they disagree at the boundary both may act. So commander may call an entry
 _internal-shaped_ only when the focus age is at least **twice** the grace period
 (`internalMarginMs`, default = `focusGraceMs`). Anything inside
@@ -140,7 +171,7 @@ Two disjoint scopes:
 `scope:'external'` with `to:'ask'`: prompting on outside links is linkward's
 monopoly, and two pickers on one territory is F2 rebuilt by hand.
 
-**[A11] Suppressed bookmark hints are surfaced.** When a rule outranks a bookmark
+**`A11` Suppressed bookmark hints are surfaced.** When a rule outranks a bookmark
 hint the outcome is unchanged but reported: `rule <id> overrode bookmark hint
 <folder>`. Deterministic silence that nobody can see is how F6 hid for two days.
 
@@ -183,7 +214,7 @@ and reopens. It is the _only_ path by which a rule may touch a flow that already
 exists, and it replaces the dialog from F2 with something that acts instead of
 asking.
 
-**[A14]** It preserves `active`, `windowId` and `index + 1` from the tab it
+**`A14`** It preserves `active`, `windowId` and `index + 1` from the tab it
 replaces, so a middle-clicked background tab is reopened as a background tab in
 the same position. Routing that steals focus is a different kind of wrong.
 
@@ -202,21 +233,21 @@ Three tiers, deliberately unequal:
 Folders are configured by **path** (`toolbar/Work`), never by bookmark id — ids
 are per profile and would make the config unportable.
 
-**[A13] One index, no search path.** The index is keyed by a canonical URL form
+**`A13` One index, no search path.** The index is keyed by a canonical URL form
 (lowercased host, unified trailing slash, fragment dropped, scheme folded), and
 _any_ post-normalisation collision across differently-mapped folders is a
 conflict handled like any other. A live `bookmarks.search()` fallback would
 disagree with the index on trailing slashes and fragments — two mechanisms, two
 answers, and the bug reports would be irreproducible.
 
-**[A16] The index is built behind a memoised promise, awaited inside the
+**`A16` The index is built behind a memoised promise, awaited inside the
 blocking handler.** Firefox suspends the request while a promise-returning
 blocking listener resolves — the handler already awaits the config read the same
 way. Without this, the _first_ bookmark opened after the event page idles out
 would route differently from the second, which is precisely the class of bug
 that cannot be reproduced on demand.
 
-**[A15][A21] `never[]` and `authHosts[]` filter hints before ranking.** A
+**`A15` `A21` `never[]` and `authHosts[]` filter hints before ranking.** A
 console deep-link filed under a mapped folder must not become a silent route into
 the wrong account — F4 through a side door. Tier 1 and tier 3 remain available,
 because both are human gestures.
@@ -232,22 +263,22 @@ because both are human gestures.
 Verified platform facts that shape this:
 
 - Managed storage is read **once per extension start**. There is no
-  `onChanged`, no file watcher. **[A1]** So the popup shows the loaded revision
+  `onChanged`, no file watcher. **`A1`** So the popup shows the loaded revision
   and its age, a Reload affordance is offered, and the doctrine for an emergency
   is **Pause (this session)** — stored in `storage.session`, instant, dying with
   the browser — or disabling the add-on. Never an emergency config edit.
 - A missing manifest makes `storage.managed.get()` _reject_. That is caught and
   becomes **inert mode with the claim receiver still armed**, so peers keep
   working.
-- **[A4]** `validateConfig`'s _first_ check is schema-version equality, with a
+- **`A4`** `validateConfig`'s _first_ check is schema-version equality, with a
   badge that names the direction of the mismatch — "config is schema 2,
   extension supports 1" — rather than a generic error. An extension accepts
   schema N and N−1.
-- **[A3]** The revision string embeds `git describe --dirty` plus a
+- **`A3`** The revision string embeds `git describe --dirty` plus a
   branch/upstream marker. `make apply` refuses without `--force` on a dirty tree
   or a branch behind upstream, and prints _"applied revision X — run make apply
   on your other machines"_.
-- **[A2][A10]** `compile.mjs` stamps the **same** revision into every emitted
+- **`A2` `A10`** `compile.mjs` stamps the **same** revision into every emitted
   manifest, and `cc:ping` replies carry the loaded revision. Commander gates
   external enforcement on agreement: if linkward reports a different revision,
   external rules resolve to leave-alone with a "peer config skew" badge. Two
@@ -261,12 +292,12 @@ Verified platform facts that shape this:
 `check.mjs` in the config repo runs the **shipped** `engine.js`, so the verifier
 and the browser cannot drift in their logic.
 
-**[A7]** But "one engine" is only true per revision: the config repo pins the
+**`A7`** But "one engine" is only true per revision: the config repo pins the
 public repo at the **installed release tag**, not at `HEAD`, and `check.mjs`
 asserts `engine.VERSION === pin` as its first test. The pin moves in a dedicated
 commit _after_ the matching release is confirmed installed.
 
-**[A8]** And the engine's _input_ is still assembled by two different pieces of
+**`A8`** And the engine's _input_ is still assembled by two different pieces of
 code, which is where the next silent divergence would live. So fixtures are
 **harvested from reality**: the decision ring buffer records the full assembled
 input beside each Decision, and the popup can export those as `check.mjs` cases.
@@ -282,10 +313,10 @@ Ordered so that at no point do two enforcing routers overlap:
 2. Soak: walk the whole failure catalogue — a VPN connect, a terminal sign-in,
    launcher openings in both containers, bookmarks — and read the decision log.
    Nothing is enforced yet; the log says what _would_ have happened.
-3. **[A12]** Delete the incumbent per-site pins, tombstone-verified, on **every**
+3. **`A12`** Delete the incumbent per-site pins, tombstone-verified, on **every**
    synced machine — still under `dryRun`, which is the only sanctioned overlap
    with an enforcing incumbent.
-4. **[A18]** In one sitting: `dryRun: false` **and** disable Containerise **and**
+4. **`A18`** In one sitting: `dryRun: false` **and** disable Containerise **and**
    disable Folder Containers. Every enforcing incumbent, not just the obvious one.
 5. Verify the hint and launcher paths on this machine, then uninstall.
 
@@ -306,7 +337,7 @@ Ordered so that at no point do two enforcing routers overlap:
 
 ### The pure core
 
-```
+```text
 decide(input) → Decision
 ```
 

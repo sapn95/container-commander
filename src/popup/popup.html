@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="../pick/pick.css" />
+    <title>container commander</title>
+  </head>
+  <body>
+    <main>
+      <h1>container commander</h1>
+
+      <!-- Built early rather than last. Managed storage is read once per
+           extension start, so the honest answer to "is my edit live" is a
+           revision and an age on screen — not a claim of liveness. -->
+      <section>
+        <h2>Policy</h2>
+        <p class="url" id="revision">reading…</p>
+        <p class="note" id="state"></p>
+        <div class="choices">
+          <button id="reload" type="button">Reload policy</button>
+          <button id="pause" type="button">Pause for this session</button>
+        </div>
+        <p class="note">
+          Reloading re-reads the managed file. An emergency stop is Pause, or disabling the add-on —
+          never an emergency edit to the policy.
+        </p>
+      </section>
+
+      <section>
+        <h2>Recent decisions</h2>
+        <ul class="rules" id="log"></ul>
+        <p class="note" id="log-empty">Nothing decided yet this session.</p>
+      </section>
+
+      <p class="note version">
+        <span id="version"></span> ·
+        <a href="https://github.com/sapn95/container-commander" target="_blank" rel="noreferrer"
+          >source</a
+        >
+      </p>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

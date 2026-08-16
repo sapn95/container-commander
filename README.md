@@ -12,10 +12,11 @@ asking you to settle it by hand.
 
 container-commander is the arbiter that makes the question have one answer.
 
-> **Status: design and specification.** The architecture below survived a
+> **Status: implemented, not yet released.** The architecture below survived a
 > three-way design panel, two judges and four adversarial passes that found
-> twenty-one breaks — every one of which is repaired here. The tests are being
-> written first. There is no implementation yet, and that is deliberate.
+> twenty-one breaks — every one repaired here. The tests were written first and
+> the code was written to satisfy them: **237 specs, 93% statements**, with the
+> failure catalogue carried as executable regressions.
 
 ## The one idea
 
@@ -81,6 +82,22 @@ per decision is in [docs/adr/](docs/adr/).
 | `docs/protocol.md`        | the four-message claim protocol                            |
 | `tests/`                  | the specification, as failing tests                        |
 | `src/lib/engine.js`       | the pure core — does not exist yet, by design              |
+
+## Installing
+
+There is nothing to install from a store yet. To run it from a checkout:
+
+```bash
+npm ci && npm run build
+```
+
+then `about:debugging` → **This Firefox** → **Load Temporary Add-on** →
+`dist/manifest.json`.
+
+It will do **nothing at all** until a policy exists, and it says so on the
+toolbar badge. That is not a broken install: the extension ships no rules by
+design, and the policy arrives from your own config repository as a managed
+storage file — see [docs/publishing.md](docs/publishing.md#the-policy-file-is-not-part-of-the-release).
 
 ## Licence
 

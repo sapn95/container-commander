@@ -64,8 +64,12 @@ export function situation(over = {}) {
       pendingUrl: '',
       ...tab,
     },
-    // The tab was created 200ms ago and has not been decided about yet.
-    candidate: { since: NOW - 200, spent: false, ...candidate },
+    // The tab is being created NOW. Deliberately not "200ms ago": the entry
+    // shape is measured at the moment the tab appeared, not at the moment the
+    // request is decided, so keeping the two clocks equal by default means a
+    // test that says `focusedSince: NOW - 1600` is stating the focus age it
+    // actually means rather than that age minus an offset hidden in here.
+    candidate: { since: NOW, spent: false, ...candidate },
     claims: { boundToTab: false, pendingMatch: null, ...claims },
     // The browser came to the front as the tab appeared: an outside hand-off.
     focus: { focusedSince: NOW - 200, ...focus },

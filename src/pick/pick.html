@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="pick.css" />
+    <title>Which container?</title>
+  </head>
+  <body>
+    <main>
+      <h1>Open this in which container?</h1>
+      <!-- The address renders as TEXT and never as a link. This page is
+           web-accessible, so the query string is hostile input. -->
+      <p class="url" id="url"></p>
+      <div class="choices" id="choices"></div>
+      <p class="note">
+        Asked because a rule for this address says to. <kbd>1</kbd>–<kbd>9</kbd> to pick,
+        <kbd>Esc</kbd> to close the tab.
+      </p>
+    </main>
+    <script type="module" src="pick.js"></script>
+  </body>
+</html>

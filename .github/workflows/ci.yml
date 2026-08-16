@@ -24,4 +24,8 @@ jobs:
       # one failure that cannot be fixed after the fact by a follow-up commit.
       - run: npm run lint:leaks
       - run: npm run format:check
-      - run: npm test
+      - run: npm run test:coverage
+      - run: npm run package
+      # The same check AMO runs. A package it would reject must not reach a
+      # release just because the tests were green.
+      - run: npx --yes web-ext@10 lint --source-dir=dist --warnings-as-errors=false
