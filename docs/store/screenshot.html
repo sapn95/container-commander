@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>container commander — store screenshot</title>
+    <!--
+      The store screenshot, 1280x800, as ONE self-contained file: no modules, no
+      chrome.* stubs, no local server. That is why it works where rendering the
+      real page did not — this opens straight from disk in any browser and can
+      be captured with nothing installed.
+
+      It is a staged picture of the popup, not the page itself. The colours are
+      copied from src/pick/pick.css; keep them in step by hand when that
+      changes.
+
+      What it has to communicate in one frame: the thing decides ONCE, and it
+      says WHY every time — including when the answer was to do nothing. The log
+      is the product.
+    -->
+    <style>
+      :root {
+        --bg: #fff;
+        --fg: #16181d;
+        --muted: #5b6270;
+        --border: #d8dce3;
+        --accent: #2f6feb;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+      }
+      .stage {
+        display: flex;
+        gap: 64px;
+        align-items: center;
+        width: 1280px;
+        height: 800px;
+        padding: 0 80px;
+        background:
+          radial-gradient(900px 620px at 108% -12%, #e3ecff 0%, rgba(227, 236, 255, 0) 62%), #f5f6f8;
+        font:
+          15px/1.5 system-ui,
+          -apple-system,
+          'Segoe UI',
+          sans-serif;
+        color: var(--fg);
+      }
+      .say {
+        width: 470px;
+      }
+      .say h1 {
+        margin: 0 0 14px;
+        font-size: 34px;
+        line-height: 1.15;
+        letter-spacing: -0.01em;
+      }
+      .say p {
+        margin: 0 0 16px;
+        color: #3c434f;
+        font-size: 16px;
+      }
+      .say .lead {
+        font-size: 18px;
+      }
+      .ladder {
+        margin: 22px 0 0;
+        padding: 0;
+        list-style: none;
+        font-size: 14px;
+      }
+      .ladder li {
+        display: flex;
+        gap: 10px;
+        padding: 5px 0;
+        color: #3c434f;
+      }
+      .ladder .n {
+        flex: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 20px;
+        text-align: center;
+      }
+      .ladder .n.off {
+        background: #c3c9d4;
+      }
+
+      .card {
+        width: 470px;
+        padding: 26px 28px 30px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--bg);
+        box-shadow: 0 22px 48px rgba(16, 24, 40, 0.14);
+      }
+      .card h2 {
+        margin: 0 0 18px;
+        font-size: 20px;
+      }
+      .sec {
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border);
+      }
+      .sec h3 {
+        margin: 0 0 10px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        color: var(--muted);
+        text-transform: uppercase;
+      }
+      .rev {
+        margin: 0;
+        padding: 9px 11px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+      }
+      .note {
+        margin: 9px 0 0;
+        color: var(--muted);
+        font-size: 12.5px;
+      }
+      .log {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .log li {
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+        padding: 7px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+      }
+      .log li:last-child {
+        border-bottom: 0;
+      }
+      .log .host {
+        flex: 1;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .log .why {
+        flex: none;
+        color: var(--muted);
+        font-family: ui-monospace, monospace;
+      }
+      .log .why.go {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        margin-top: 14px;
+      }
+      .row button {
+        padding: 7px 13px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="say">
+        <h1>One thing decides which container a tab opens in.</h1>
+        <p class="lead">
+          Once, at the moment the tab is created — and never again, so a sign-in can’t be pulled
+          between identities halfway through.
+        </p>
+        <ul class="ladder">
+          <li><span class="n">1</span> A launcher already placed this tab? Leave it.</li>
+          <li><span class="n">2</span> A redirect, or a container you chose? Leave it.</li>
+          <li><span class="n">3</span> Otherwise: your policy decides.</li>
+          <li><span class="n off">·</span> Unsure? Behave as though not installed.</li>
+        </ul>
+        <p class="note" style="margin-top: 18px">
+          Rules come from a file you own, read-only. No settings screen, nothing synced, nothing
+          sent anywhere.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>container commander</h2>
+
+        <div class="sec">
+          <h3>Policy</h3>
+          <p class="rev">policy-2026.08.16-a1b2c3d</p>
+          <p class="note">11 rules · dry run: deciding but not enforcing</p>
+        </div>
+
+        <div class="sec">
+          <h3>Recent decisions</h3>
+          <ul class="log">
+            <li>
+              <span class="host">flow.example-corp.com/browse/X-1</span
+              ><span class="why go">work</span>
+            </li>
+            <li>
+              <span class="host">login.example-idp.com/…/saml2</span
+              ><span class="why">started-by-document</span>
+            </li>
+            <li>
+              <span class="host">console.example-cloud.com/home</span
+              ><span class="why">claim:pending</span>
+            </li>
+            <li>
+              <span class="host">eu-1.console.example-cloud.com</span
+              ><span class="why">never-host</span>
+            </li>
+            <li>
+              <span class="host">docs.example.com/page</span
+              ><span class="why">user-container-entry</span>
+            </li>
+            <li>
+              <span class="host">intranet.example.com/form</span
+              ><span class="why">method:POST</span>
+            </li>
+          </ul>
+          <div class="row">
+            <button type="button">Reload policy</button>
+            <button type="button">Pause for this session</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

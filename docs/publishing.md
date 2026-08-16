@@ -5,29 +5,23 @@ so there is no Chrome half and no lockstep to keep between two review queues.
 
 ## What only a human can do
 
-**Two things, once**, and they are why this page exists rather than a script.
+**One thing**, and it takes about a minute.
 
-### 1. Create the add-on on AMO
+The first upload creates the listing _and_ the version through the API, as long
+as the package carries what AMO refuses to take from the manifest — `categories`,
+`summary` and `version.license`. All three, plus the description, homepage,
+support link and reviewer notes, are in
+[`docs/store/amo-metadata.json`](store/amo-metadata.json). There is **no form to
+fill in by hand**.
 
-The first upload can create a listed add-on through the API, but only if the
-package carries the two fields AMO refuses to take from the manifest. They live
-in [`docs/store/amo-metadata.json`](store/amo-metadata.json) and AMO reports
-them **one per attempt**, so discovering them by trial costs one round trip
-each:
+> AMO reports a missing field **one per attempt**, so each omission would cost a
+> round trip. That is why the file is fuller than the minimum.
 
-| Missing           | What it says                                                    |
-| ----------------- | --------------------------------------------------------------- |
-| `version.license` | This field, or custom_license, is required for listed versions. |
-| `categories`      | This field is required for add-ons with listed versions.        |
+The screenshot is the one thing the API will not take on creation. Upload
+[`docs/store/01-popup.png`](store/01-popup.png) afterwards, at leisure — a
+listing publishes without it.
 
-Both are already in that file. What is _not_ in it, and cannot be: the listing
-itself — description, screenshots, the support link. Mozilla wants those typed
-into <https://addons.mozilla.org/developers/> by somebody signed in.
-
-**So: sign in to AMO once, in a browser, and fill in the listing.** Everything
-after that is automatic.
-
-### 2. Put the API key in the repository
+### Put the API key in the repository
 
 <https://addons.mozilla.org/developers/addon/api/key/> → two values:
 
