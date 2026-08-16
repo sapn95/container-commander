@@ -226,11 +226,15 @@ jobs:
           # reaches main. It is created on the merged commit further down.
           git push --force-with-lease origin "HEAD:refs/heads/$BRANCH"
 
-          if ! PR="$(gh pr view "$BRANCH" --json number -q .number 2>/dev/null)"; then
+          # OPEN only. `gh pr view <branch>` also finds a CLOSED pull request
+          # left over from an abandoned release, and the loop below then waits
+          # out its entire budget on a merge state that will never change.
+          PR="$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')"
+          if [ -z "$PR" ]; then
             gh pr create --base "$BASE" --head "$BRANCH" \
               --title "chore(release): ${TAG#v}" \
               --body "Automated version bump for $TAG. Merged by the release workflow once the required checks pass."
-            PR="$(gh pr view "$BRANCH" --json number -q .number)"
+            PR="$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')"
           fi
           echo "Release PR #$PR on $BRANCH"
 
@@ -280,7 +284,20 @@ jobs:
           done
 
           # Squash, because the branch protection also requires linear history.
-          gh pr merge "$PR" --squash --delete-branch
+          #
+          # Retried: "Base branch was modified" is GitHub telling us the base
+          # moved between the mergeability check and the merge. That is a race,
+          # not a verdict, and abandoning a release over it leaves a pushed
+          # branch and an open PR to clean up by hand.
+          for attempt in 1 2 3; do
+            if gh pr merge "$PR" --squash --delete-branch; then break; fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::Could not merge release PR #$PR after 3 attempts."
+              exit 1
+            fi
+            echo "merge attempt $attempt failed — retrying in 15s"
+            sleep 15
+          done
 
           # Tag the commit that actually landed, not the pre-squash one.
           git fetch origin "$BASE"
