@@ -1,13 +1,31 @@
-// Generates the extension icons (16/48/128 px): a rounded, gradient badge with
-// THREE LANES crossed by one gate bar, the middle lane picked out in amber
-// beyond the bar. That is the whole idea in one shape: several identities, one
-// place where it is decided which of them a tab belongs to.
+// Generates the extension icons: a rounded green badge holding one white disc
+// above two dark ones. Several identities were on the table, one place decided
+// which of them this tab belongs to, and the two it did not pick were left
+// exactly where they were.
 //
-// Deliberately NOT linkward's fork, even though this repository borrowed that
-// script. Two of these sit on the same toolbar, and an icon that has to be
-// squinted at to tell it from its neighbour has failed at the only job an icon
-// has. Three lanes and a bar survive 16 px, which is the size that decides
-// whether an icon works at all.
+// The two unpicked discs are DARKER than the badge, not paler. That is the
+// whole difference between "the brighter member of a set" and "the one that was
+// taken out of it": a dark disc reads as an empty place, and an empty place is
+// evidence that something acted. A paler disc reads as a dimmer lamp, which is
+// the visual grammar of a status indicator — and a status indicator invites the
+// click this extension refuses to honour, because the policy is read-only and
+// the decision is already made.
+//
+// Discs because a coloured dot is Firefox's own glyph for a container, so the
+// vocabulary is borrowed rather than invented; because beeline already owns the
+// square on this toolbar and linkward owns the three-armed stroke; and because
+// nothing else holds its area as well when the badge is 16 px wide.
+//
+// Green, and specifically not blue. This mark used to ship linkward's palette
+// byte for byte — the same gradient ramp and the same white-and-amber ink — on
+// a toolbar where the two sit a couple of slots apart. Hue is the only separator
+// that still works at 16 px seen out of the corner of an eye, and the previous
+// version had spent it. Green also keeps its distance from beeline's red.
+//
+// Sizes: Firefox draws about:addons at 32 (64 on a 2x display) and the toolbar
+// button at 16 (32 on 2x). Shipping only 48 and 128, as this did, meant both
+// 32 px cases came from a blurry 1.5x downscale. 96 is left out — nothing asks
+// for it.
 //
 // Pure Node, with a hand-rolled PNG encoder, so the repo has no image
 // dependency and nothing has to be installed to rebuild them. Edges are 4×4
@@ -21,13 +39,20 @@ import { fileURLToPath } from 'node:url';
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'icons');
 
-// A gate blue rather than a brand colour: this is nobody's product, and blue is
-// what the browser itself already uses for "a decision happens here".
-const GRAD_TOP = [47, 111, 235]; // #2F6FEB
-const GRAD_BOTTOM = [30, 78, 176]; // #1E4EB0
-const TILE = [255, 255, 255]; // the lanes and the gate bar
-const ACCENT = [255, 203, 0]; // #FFCB00 — the lane that was chosen
+const GRAD_TOP = [13, 145, 108]; // #0D916C
+const GRAD_BOTTOM = [6, 96, 74]; // #06604A
+const CHOSEN = [255, 255, 255]; // the container this tab was placed in
+const EMPTY = [5, 71, 55]; // #054737 — the places it was not put
 const SS = 4; // supersampling factor per axis
+
+// Proportions of the badge, so every size is the same drawing. The chosen disc
+// is deliberately much larger than the other two: at 16 px it is the only
+// element guaranteed to survive, and it has to be the one that does.
+const CHOSEN_R = 0.205;
+const CHOSEN_Y = 0.315;
+const EMPTY_R = 0.125;
+const EMPTY_Y = 0.705;
+const EMPTY_X = [0.295, 0.705];
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -115,6 +140,10 @@ function inRoundedRect(px, py, x, y, w, h, r) {
   return (px - cx) ** 2 + (py - cy) ** 2 <= r * r;
 }
 
+function inDisc(px, py, cx, cy, r) {
+  return (px - cx) ** 2 + (py - cy) ** 2 <= r * r;
+}
+
 function lerp(a, b, t) {
   return a + (b - a) * t;
 }
@@ -124,7 +153,10 @@ function colorAt(px, py, size) {
   const badgeR = size * 0.22;
   if (!inRoundedRect(px, py, 0, 0, size, size, badgeR)) return [0, 0, 0, 0];
 
-  // Vertical gradient background.
+  // Vertical gradient, kept shallow. Both siblings carry one, so it is what
+  // makes the three read as a set rather than as three unrelated products — but
+  // a gradient steep enough to mean something is a gradient that disappears at
+  // 16 px, where it is one or two pixels of ramp.
   const t = py / size;
   const bg = [
     lerp(GRAD_TOP[0], GRAD_BOTTOM[0], t),
@@ -132,44 +164,20 @@ function colorAt(px, py, size) {
     lerp(GRAD_TOP[2], GRAD_BOTTOM[2], t),
   ];
 
-  // Three lanes and a gate bar. Drawn as round-capped segments rather than a
-  // path, because a hand-rolled rasteriser has no stroking and the shape has to
-  // stay legible at 16 px.
-  const w = size * 0.115; // stroke half-width
-  const top = size * 0.2;
-  const bottom = size * 0.8;
-  const gateY = size * 0.5;
-  const lanes = [size * 0.28, size * 0.5, size * 0.72];
-
-  const onSegment = (ax, ay, bx, by) => {
-    const dx = bx - ax;
-    const dy = by - ay;
-    const len2 = dx * dx + dy * dy;
-    // Project onto the segment, clamped — the clamp is what gives round caps,
-    // and the caps are what keep the crossings from notching.
-    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
-    const qx = ax + dx * t;
-    const qy = ay + dy * t;
-    return (px - qx) ** 2 + (py - qy) ** 2 <= (w / 2) ** 2;
-  };
-
-  // The chosen lane first: it must win wherever it overlaps the gate bar.
-  if (onSegment(lanes[1], gateY, lanes[1], bottom)) {
-    return [ACCENT[0], ACCENT[1], ACCENT[2], 255];
+  // Spaced so no two discs come within ~1.7 px of each other at 16 px. That is
+  // the narrowest gap that still resolves to clean background between them; the
+  // three-lane mark this replaced left 1 px and merged into a comb.
+  if (inDisc(px, py, size * 0.5, size * CHOSEN_Y, size * CHOSEN_R)) {
+    return [CHOSEN[0], CHOSEN[1], CHOSEN[2], 255];
   }
-  // The gate bar: one horizontal stroke every lane has to pass through.
-  if (onSegment(size * 0.18, gateY, size * 0.82, gateY)) {
-    return [TILE[0], TILE[1], TILE[2], 255];
-  }
-  // The lanes above the bar, all still undecided.
-  if (lanes.some((x) => onSegment(x, top, x, gateY))) {
-    return [TILE[0], TILE[1], TILE[2], 255];
+  if (EMPTY_X.some((x) => inDisc(px, py, size * x, size * EMPTY_Y, size * EMPTY_R))) {
+    return [EMPTY[0], EMPTY[1], EMPTY[2], 255];
   }
   return [bg[0], bg[1], bg[2], 255];
 }
 
 mkdirSync(OUT, { recursive: true });
-for (const size of [16, 48, 128]) {
+for (const size of [16, 32, 48, 64, 128]) {
   const png = encodePng(size, colorAt);
   writeFileSync(join(OUT, `icon-${size}.png`), png);
   console.log(`wrote icon-${size}.png (${png.length} bytes)`);
