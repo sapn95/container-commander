@@ -239,8 +239,14 @@ jobs:
           # would sit "expected" forever. workflow_dispatch is the one documented
           # exception, and a dispatched run reports its checks against the branch
           # head — the very SHA the protection evaluates.
-          gh workflow run ci.yml --ref "$BRANCH"
-          gh workflow run codeql.yml --ref "$BRANCH"
+          # Tolerant of a workflow this repository does not have: a release
+          # must not die because an OPTIONAL analysis is missing. If it is
+          # genuinely required by branch protection, the merge below blocks on
+          # it anyway and says so — which is the honest place to fail.
+          for wf in ci.yml codeql.yml; do
+            gh workflow run "$wf" --ref "$BRANCH" \
+              || echo "::warning::could not dispatch $wf — carrying on"
+          done
 
           # Wait for the required checks. gh's own --watch exits non-zero the
           # moment a check is merely pending, so poll the mergeable state that
