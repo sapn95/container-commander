@@ -17,9 +17,12 @@ fill in by hand**.
 > AMO reports a missing field **one per attempt**, so each omission would cost a
 > round trip. That is why the file is fuller than the minimum.
 
-The screenshot is the one thing the API will not take on creation. Upload
-[`docs/store/01-popup.png`](store/01-popup.png) afterwards, at leisure — a
-listing publishes without it.
+The listing **icon and screenshots** are not in the package either, and AMO does
+not read them from it — with no icon uploaded, a signed and reviewed add-on sits
+in the store behind Mozilla's grey placeholder. `web-ext sign` cannot upload
+either one, so the release workflow runs
+[`scripts/amo-art.mjs`](../scripts/amo-art.mjs) in a step of its own after
+signing. Nothing to do by hand there either.
 
 ### Put the API key in the repository
 
@@ -55,6 +58,47 @@ for the checks, squash-merges, and tags the commit that actually landed — a
 squash rewrites the commit, so a tag made before the merge would name a SHA that
 never reaches `main`.
 
+## The listing art
+
+`npm run amo:art`, run by the release workflow immediately after the sign step.
+It uploads `dist/icons/icon-128.png` as the listing icon and every numbered PNG
+in [`docs/store/`](store/) — `01-*.png`, `02-*.png`, … — as the screenshots, in
+filename order.
+
+It is **declarative**: each run deletes the previews that are on the listing and
+re-posts the whole set. Running it twice leaves the listing identical and
+accumulates nothing.
+
+Three things about that API each cost an afternoon, so they are written down
+here rather than rediscovered.
+
+- **There is no image replace.** `PATCH .../previews/<id>/` accepts a new image,
+  answers `200` — and keeps the old one. Only the caption and the position are
+  writable after creation. Replacing a screenshot is DELETE then POST, which is
+  why the step wipes before it uploads instead of editing in place. Reading the
+  current set is a third quirk: `GET` on the previews collection is a `405`, so
+  the existing previews come off `previews[]` on the add-on detail.
+- **The declared part type is what gets validated**, not the bytes. A bare
+  `Buffer` appended to a `FormData` goes out as `application/octet-stream`, and
+  a perfectly good PNG comes back as _"Images must be either PNG or JPG."_ Wrap
+  it: `new Blob([buf], { type: 'image/png' })`.
+- **Uploads are paced about 21 seconds apart.** Preview create and delete count
+  against the same add-on submission throttle as the version upload that
+  `web-ext sign` made minutes earlier — 3 a minute, 10 an hour — and a naive
+  loop `429`s on its fourth call.
+
+> The old note here said the API would not take a screenshot. It does; it will
+> not take one _while creating the add-on_, because that request is already
+> multipart (it carries the XPI) and form data has no way to nest the `version`
+> object inside it. Screenshots are simply a second call.
+
+Size: AMO stores a preview at up to 2400×1800, downscaling anything larger and
+never upscaling anything smaller — so a bigger source is fine and simply lands
+smaller. The 2560×1600 we ship becomes 2400×1500. Its gallery card is 320×200,
+so 1.6:1 fills the card and 4:3 letterboxes it. There is no minimum and no ratio rule on
+the API path — the 1000×750 check belongs to the devhub form, which this never
+touches.
+
 ## The policy file is not part of the release
 
 Worth being explicit, because it is the whole design: **this repository ships no
@@ -72,11 +116,14 @@ needs no release. That separation is the point.
 
 ## When a release does not publish
 
-| Message                           | Meaning                                                                                         |
-| --------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `AMO secrets incomplete`          | The two secrets are not both set. Nothing was uploaded; nothing is broken.                      |
-| `version already exists`          | That version number is already on AMO. Bump and re-run.                                         |
-| a validation error naming a field | AMO wants another key in `amo-metadata.json`. It reports one per attempt, so add it and re-run. |
+| Message                           | Meaning                                                                                                                                                        |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AMO secrets incomplete`          | The two secrets are not both set. Nothing was uploaded; nothing is broken.                                                                                     |
+| `version already exists`          | That version number is already on AMO. Bump and re-run.                                                                                                        |
+| a validation error naming a field | AMO wants another key in `amo-metadata.json`. It reports one per attempt, so add it and re-run.                                                                |
+| `No add-on on AMO under this id`  | The art step ran before a listing existed. The next release uploads it.                                                                                        |
+| `AMO is read-only right now`      | Mozilla is mid-deploy or mid-incident. The version published; the art follows next release.                                                                    |
+| `AMO uploads are switched off`    | The same, as a `503` from an upload rather than up front. If it lands between the wipe and the re-post, the listing has no screenshots until the next release. |
 
 A listed add-on is reviewed by Mozilla, which takes hours to days. The workflow
 does **not** wait for approval (`--approval-timeout=0`): waiting would time out

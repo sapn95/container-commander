@@ -17,6 +17,19 @@ const BROWSER = {
   clearTimeout: 'readonly',
 };
 
+// What scripts/ and tests/ get on top of that. This half is Node, and the AMO
+// uploader talks HTTP with the platform's own fetch rather than with a
+// dependency — so the three web globals it needs are listed here and not
+// borrowed from BROWSER, which is about what the extension may touch.
+const NODE = {
+  process: 'readonly',
+  Buffer: 'readonly',
+  fetch: 'readonly',
+  FormData: 'readonly',
+  Blob: 'readonly',
+  Response: 'readonly',
+};
+
 export default [
   // dist/ is a copy of src/. Linting it reports every finding twice and
   // invites somebody to 'fix' a generated file.
@@ -27,7 +40,9 @@ export default [
     rules: { 'no-unused-vars': ['error', { argsIgnorePattern: '^_' }] },
   },
   {
-    files: ['tests/**/*.js', 'scripts/**/*.mjs', '*.config.js'],
-    languageOptions: { globals: { ...BROWSER, process: 'readonly', Buffer: 'readonly' } },
+    // .mjs too: the test helpers that stub a network are modules, and a glob
+    // that missed them reported every Node global in them as undefined.
+    files: ['tests/**/*.js', 'tests/**/*.mjs', 'scripts/**/*.mjs', '*.config.js'],
+    languageOptions: { globals: { ...BROWSER, ...NODE } },
   },
 ];
