@@ -22,7 +22,7 @@ it instead of racing it, which is the whole reason this repository exists.
 > tagged and submitted. The architecture below survived a three-way design panel,
 > two judges and four adversarial passes that found twenty-one breaks — every one
 > repaired here. The tests were written first and the code was written to satisfy
-> them: **251 specs, 93.7% statements**, 97% on the engine that makes every
+> them: **261 specs, 93.7% statements**, 97% on the engine that makes every
 > decision, with four of the catalogued failures carried as executable
 > regressions and the other two designed out rather than tested for.
 

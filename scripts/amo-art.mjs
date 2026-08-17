@@ -83,6 +83,13 @@ const UNSAFE_SPENT_BY_SIGN = 2;
 const MAX_RETRY_AFTER_S = 120;
 const THROTTLE_ATTEMPTS = 3;
 
+// A single request's patience. The slowest call here is a 300 KB image POST, so
+// anything past this is a stall and not a slow upload. It matters because the
+// release step budgets eight minutes for the whole sync: a request allowed to
+// hang forever spends all of it on one call and then gets killed mid-sync, which
+// is the one way this script can still leave a listing half finished.
+const REQUEST_TIMEOUT_MS = 60_000;
+
 const b64url = (value) => Buffer.from(value).toString('base64url');
 
 /**
@@ -183,12 +190,34 @@ function client({ issuer, secret }) {
     }
     // Deliberately no Content-Type header, even on the multipart calls: fetch
     // derives it from the FormData, and a hand-written one loses the boundary.
-    const res = await fetch(`${API}${path}`, {
-      method,
-      body,
-      headers: { Authorization: `JWT ${mintJwt(issuer, secret)}` },
-    });
-    const text = await res.text();
+    //
+    // A timeout, and a catch around it. Without either, a stalled connection
+    // sits until the job's own timeout kills the step mid-sync, and a refused
+    // one leaves main() as an unhandled rejection — a stack trace instead of the
+    // one thing worth printing here, which is whether the listing was left half
+    // finished.
+    let res;
+    let text;
+    try {
+      res = await fetch(`${API}${path}`, {
+        method,
+        body,
+        headers: { Authorization: `JWT ${mintJwt(issuer, secret)}` },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      text = await res.text();
+    } catch (err) {
+      const why =
+        err?.name === 'TimeoutError' ? `no answer in ${REQUEST_TIMEOUT_MS}ms` : err?.message;
+      console.error(`::error::${method} ${path} failed: ${why}`);
+      console.error(
+        mutated
+          ? 'The listing has already been changed and this sync did not finish. ' +
+              'Re-run the release workflow, or `npm run amo:art`, to complete it.'
+          : 'Nothing on the listing was changed.',
+      );
+      process.exit(1);
+    }
     // Stamped on COMPLETION, not on send. The throttle counts arrivals, so
     // pacing from the moment a request left leaks the whole margin as soon as
     // one call is slower than the next — and the image POSTs are the slow ones.

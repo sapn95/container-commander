@@ -28,6 +28,7 @@ const NODE = {
   FormData: 'readonly',
   Blob: 'readonly',
   Response: 'readonly',
+  AbortSignal: 'readonly',
 };
 
 export default [
