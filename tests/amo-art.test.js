@@ -14,9 +14,9 @@
 // that the monthly trigger would only ever fire if src/ or scripts/ changed.
 // A review caught it. Nothing in the suite would have. Hence:
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -24,6 +24,41 @@ import { signHs256 } from '../scripts/amo-art.mjs';
 
 const SCRIPT = 'scripts/amo-art.mjs';
 const FAKE = 'tests/helpers/fake-amo.mjs';
+const SCREENSHOTS = ['01-first.png', '02-second.png'];
+
+// The uploader reads dist/ and docs/store/, so it is run from a fixture tree
+// rather than from this checkout. Two reasons, and the second is the one that
+// bit: `npm run ci` runs the tests BEFORE it packages, so on a clean clone
+// there is no dist/ at all and every one of these failed at "dist/ is not
+// built" — green here, red the moment CI saw it. And tests/build.test.js
+// rebuilds dist/ in a parallel worker, so anything reading it is racing.
+let ROOT;
+
+beforeAll(() => {
+  ROOT = mkdtempSync(join(tmpdir(), 'amo-art-root-'));
+  mkdirSync(join(ROOT, 'scripts'), { recursive: true });
+  mkdirSync(join(ROOT, 'tests', 'helpers'), { recursive: true });
+  mkdirSync(join(ROOT, 'dist', 'icons'), { recursive: true });
+  mkdirSync(join(ROOT, 'docs', 'store'), { recursive: true });
+
+  cpSync(SCRIPT, join(ROOT, SCRIPT));
+  cpSync(FAKE, join(ROOT, FAKE));
+  writeFileSync(
+    join(ROOT, 'dist', 'manifest.json'),
+    JSON.stringify({ browser_specific_settings: { gecko: { id: 'fixture@example.com' } } }),
+  );
+  // Real PNG bytes, because the fake asserts on the Content-Type the uploader
+  // DECLARES for each part, and a text file would still declare image/png. The
+  // point of that assertion is the Blob wrapper, not the file.
+  const png = readFileSync('src/icons/icon-128.png');
+  writeFileSync(join(ROOT, 'dist', 'icons', 'icon-128.png'), png);
+  for (const name of SCREENSHOTS) writeFileSync(join(ROOT, 'docs', 'store', name), png);
+  // A sibling that is NOT two-digit-prefixed, to prove the glob is a filter and
+  // not just a sort.
+  writeFileSync(join(ROOT, 'docs', 'store', 'screenshot-1x.png'), png);
+});
+
+afterAll(() => rmSync(ROOT, { recursive: true, force: true }));
 
 const withoutCredentials = () => {
   const env = { ...process.env };
@@ -36,17 +71,17 @@ const withoutCredentials = () => {
  * Run the uploader against the fake store, and hand back the transcript of what
  * it actually sent alongside its exit code.
  *
- * FAKE_AMO_PACE_MS collapses the throttle pacer — without it every one of these
+ * AMO_ART_PACE_MS collapses the throttle pacer — without it every one of these
  * would take a minute and a half of real time, and a test nobody runs is not a
  * regression test.
  */
 function run(scenario, { previews = 2 } = {}) {
-  const transcript = join(mkdtempSync(join(tmpdir(), 'amo-art-')), 'calls.json');
+  const transcript = join(ROOT, `calls-${scenario}-${previews}.json`);
   let status = 0;
   let stdout;
   try {
     stdout = execFileSync('node', ['--import', `./${FAKE}`, SCRIPT], {
-      cwd: process.cwd(),
+      cwd: ROOT,
       encoding: 'utf8',
       env: {
         ...process.env,
@@ -149,9 +184,19 @@ describe('replacing the screenshots', () => {
     // Position is the only ordering AMO honours; left out it falls back to
     // insertion time, which a retry of a half-finished run gets wrong.
     const { calls } = run('happy');
-    const posted = calls.filter((c) => c.method === 'POST').map((c) => c.parts.position);
+    const posted = calls.filter((c) => c.method === 'POST');
 
-    expect(posted).toEqual(posted.map((_, i) => String(i)));
+    expect(posted.map((c) => c.parts.position)).toEqual(['0', '1']);
+  });
+
+  it('uploads the numbered PNGs and nothing else in the directory', () => {
+    // The fixture also holds screenshot-1x.png, which make-art.sh writes as an
+    // intermediate. A glob that swept it up would post the same picture to the
+    // store twice, at a different size.
+    const { calls } = run('happy');
+    const posted = calls.filter((c) => c.method === 'POST');
+
+    expect(posted).toHaveLength(SCREENSHOTS.length);
   });
 });
 
