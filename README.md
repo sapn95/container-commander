@@ -22,7 +22,7 @@ it instead of racing it, which is the whole reason this repository exists.
 > tagged and submitted. The architecture below survived a three-way design panel,
 > two judges and four adversarial passes that found twenty-one breaks — every one
 > repaired here. The tests were written first and the code was written to satisfy
-> them: **261 specs, 93.7% statements**, 97% on the engine that makes every
+> them: **273 specs, 94% statements**, 97% on the engine that makes every
 > decision, with four of the catalogued failures carried as executable
 > regressions and the other two designed out rather than tested for.
 
@@ -84,9 +84,9 @@ RUNG 4  Entry rules  First match over a compiler-ordered list. External rules fo
 RUNG 5  Ask          Only when a rule says so. Never a fallback.
 RUNG 6  Leave alone  A named rung, not an else-branch. Every unknown lands here.
         ─────────────
-OUT     Human override — "Reopen this tab in <container>", on an explicit gesture.
-        The only path by which a rule may touch a flow that already exists.
-        DESIGNED, NOT YET WIRED: nothing in src/ registers the menu command.
+OUT     Human override — "Reopen this tab in <container>", on the tab's own
+        context menu. The only path by which a tab that already exists can be
+        moved, and it reads no rule to do it.
 ```
 
 Read it in full in [docs/architecture.md](docs/architecture.md); the reasoning

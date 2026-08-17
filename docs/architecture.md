@@ -216,7 +216,7 @@ to a blocking listener is holding up somebody's page.
 
 ## 9. Out of ladder — the human override
 
-A toolbar/context command: **"Reopen this tab in ‹container›"**. It applies to an
+A context command on the tab itself: **"Reopen this tab in ‹container›"**, registered through `browser.menus` — not `chrome.menus`, which does not exist; the chrome namespace only ever exposed `contextMenus`, and in Firefox the two names are separate permissions. The manifest asks for `menus`, so `menus` is the namespace that goes with it. It applies to an
 existing tab on an explicit gesture, self-claims, announces `cc:claim` to peers,
 and reopens. It is the _only_ path by which a rule may touch a flow that already
 exists, and it replaces the dialog from F2 with something that acts instead of

@@ -14,6 +14,11 @@ export const VERSION = '1.0.0';
 
 /** Rungs, named rather than numbered inline so a log line can be read aloud. */
 export const RUNG = {
+  // Not a rung. The human override is the one path that may touch a flow which
+  // already exists, and it reaches that flow without consulting the ladder at
+  // all — so it is numbered below the bottom of it rather than given a place on
+  // it. Nothing in decide() can ever return this.
+  OVERRIDE: -1,
   GATE: 0,
   CLAIM: 1,
   INHERIT: 2,
