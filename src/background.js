@@ -85,9 +85,83 @@ function armFocus() {
   seedFocusState().catch(() => {});
 }
 
+// --- The human override ----------------------------------------------------
+//
+// "Reopen this tab in ‹container›", on the tab's own context menu. Out of the
+// ladder rather than a rung of it: no rule is read and no decision is made, so
+// it is the one path by which a tab that already exists can be moved — and it
+// exists precisely because the ladder refuses to do that on its own.
+//
+// `browser.menus`, NOT `chrome.menus`. The chrome namespace only ever exposed
+// `contextMenus`, and the two names are separate permissions in Firefox: the
+// manifest asks for `menus`, so `menus` is the namespace that goes with it. This
+// was documented and requested for two releases before anything registered it,
+// which is also how it became an unused-permission flag in store review.
+const MENU_PARENT = 'cc:reopen';
+const MENU_ITEM = 'cc:reopen:';
+const menus = () => globalThis.browser?.menus;
+
+async function buildMenu() {
+  const api = menus();
+  if (!api) return;
+  await api.removeAll().catch(() => {});
+
+  // Rebuilt wholesale on every container change rather than patched. The list is
+  // never more than a handful of items and a patch that drifts from the real set
+  // offers to move a tab into a container that no longer exists.
+  const containers = await listContainers();
+  api.create({
+    id: MENU_PARENT,
+    title: 'Reopen this tab in…',
+    // The tab strip is where this belongs, and the page is where a hand reaches
+    // for it. http(s) only: there is nothing to reopen about an about: page, and
+    // a container is not a property it has.
+    contexts: ['tab', 'page'],
+    documentUrlPatterns: ['http://*/*', 'https://*/*'],
+  });
+  for (const c of containers) {
+    api.create({ id: MENU_ITEM + c.cookieStoreId, parentId: MENU_PARENT, title: c.name });
+  }
+  // Last, and deliberately offered: moving a tab OUT of a container is the same
+  // gesture, and without this the menu can only ever put things in.
+  api.create({ id: MENU_ITEM, parentId: MENU_PARENT, title: 'No container' });
+}
+
+function onMenuClicked(info, tab) {
+  const id = String(info?.menuItemId ?? '');
+  if (!id.startsWith(MENU_ITEM)) return;
+  const cookieStoreId = id.slice(MENU_ITEM.length);
+
+  const url = tab?.url ?? '';
+  if (!/^https?:\/\//.test(url) || typeof tab?.id !== 'number') return;
+  // Already there. Reopening would cost the tab its history and its scroll
+  // position to arrive exactly where it started.
+  if ((tab.cookieStoreId ?? '') === cookieStoreId) return;
+
+  // Logged like any other outcome, and named. The popup's list is the product,
+  // and an override that happened invisibly would be the one decision it could
+  // not account for. The rung is negative because this is beside the ladder and
+  // not on it.
+  log.unshift({
+    at: Date.now(),
+    url,
+    decision: { action: 'reopen', rung: RUNG.OVERRIDE, reason: 'human-override', cookieStoreId },
+  });
+  log.length = Math.min(log.length, LOG_MAX);
+
+  // A reopen is a close and a re-fetch, so this cannot preserve a POST — which
+  // is why the ladder never does it unasked. Here it was asked for.
+  return openThere(tab.id, url, cookieStoreId);
+}
+
+function armMenu() {
+  buildMenu().catch(() => {});
+}
+
 function arm() {
   armRequests();
   armFocus();
+  armMenu();
   refresh();
 }
 
@@ -110,6 +184,18 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 chrome.runtime.onInstalled.addListener(arm);
 chrome.runtime.onStartup.addListener(arm);
 chrome.permissions.onAdded.addListener(arm);
+
+// Registered here, at the top level, and not from inside buildMenu(). Only the
+// listeners present on the first synchronous run are ones the browser can wake
+// this page FOR, and a menu click on a slept-out event page would otherwise do
+// nothing at all — the failure this file's opening comment is about.
+menus()?.onClicked?.addListener(onMenuClicked);
+
+// Containers are renamed and deleted by hand, and a menu built once goes stale
+// offering somewhere that no longer exists.
+for (const event of ['onCreated', 'onRemoved', 'onUpdated']) {
+  globalThis.browser?.contextualIdentities?.[event]?.addListener(armMenu);
+}
 
 // The claim receiver is armed even in inert mode: a config this extension
 // cannot read must never break the peers that depend on it.
@@ -201,7 +287,13 @@ async function openThere(tabId, url, cookieStoreId) {
   await tell('linkward@sapn95.github.io', { type: 'cc:claim', url, cookieStoreId });
   let created;
   try {
-    created = await chrome.tabs.create({ url, active: true, cookieStoreId });
+    // Spread rather than passed: "No container" arrives here as an empty string,
+    // and the schema validator wants the key absent rather than falsy.
+    created = await chrome.tabs.create({
+      url,
+      active: true,
+      ...(cookieStoreId ? { cookieStoreId } : {}),
+    });
   } catch {
     await tell('linkward@sapn95.github.io', { type: 'cc:release', url });
     return;

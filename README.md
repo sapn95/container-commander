@@ -10,13 +10,21 @@ of which can see who asked. Add an app launcher and a link handler of your own
 and you have five. They do not merge; they race, and the tie-break is a dialog
 asking you to settle it by hand.
 
-container-commander is the arbiter that makes the question have one answer.
+container-commander is the arbiter that makes the question have one answer. The
+launcher and the link handler in that count are mine too —
+[beeline](https://github.com/sapn95/beeline) opens apps and
+[linkward](https://github.com/sapn95/linkward) catches links handed over from
+outside the browser — and both announce a tab to commander _before_ they create
+it instead of racing it, which is the whole reason this repository exists.
 
-> **Status: implemented, not yet released.** The architecture below survived a
-> three-way design panel, two judges and four adversarial passes that found
-> twenty-one breaks — every one repaired here. The tests were written first and
-> the code was written to satisfy them: **237 specs, 93% statements**, with the
-> failure catalogue carried as executable regressions.
+> **Status: in review at addons.mozilla.org.**
+> [v0.2.0](https://github.com/sapn95/container-commander/releases/tag/v0.2.0) is
+> tagged and submitted. The architecture below survived a three-way design panel,
+> two judges and four adversarial passes that found twenty-one breaks — every one
+> repaired here. The tests were written first and the code was written to satisfy
+> them: **273 specs, 94% statements**, 97% on the engine that makes every
+> decision, with four of the catalogued failures carried as executable
+> regressions and the other two designed out rather than tested for.
 
 ## The one idea
 
@@ -35,6 +43,32 @@ to the end.
 
 ## The ladder
 
+```mermaid
+flowchart TD
+    R["main_frame request"] --> G{"GATE 0<br/>GET, http(s), fresh,<br/>not yet decided?"}
+    G -->|no| L["Leave alone"]
+    G -->|yes| C{"RUNG 1<br/>Did a peer claim<br/>this tab?"}
+    C -->|yes| L
+    C -->|no| I{"RUNG 2<br/>Origin, opener, or a<br/>container chosen by hand?"}
+    I -->|yes| L
+    I -->|no| S{"RUNG 3<br/>Entry shape?"}
+    S -->|ambiguous| L
+    S -->|"external / internal"| M{"RUNG 4<br/>A rule of that scope,<br/>matching?"}
+    M -->|no| B{"A bookmark hint,<br/>internal entry only?"}
+    B -->|no| L
+    B -->|yes| O["Reopen there"]
+    M -->|"to: container"| O
+    M -->|"to: ask (internal only)"| A["RUNG 5<br/>Ask"]
+
+    style O fill:#2f6feb,color:#fff
+    style A fill:#2f6feb,color:#fff
+    style L fill:#8080801f,color:#8a8f98
+```
+
+Five of those fourteen edges end at **Leave alone**, and rung 4 is the only rung
+with three ways out. A list cannot show either, which is why the same graph is
+here and in the architecture rather than only there.
+
 ```
 GATE 0  Scope        main_frame, http(s), GET, first navigation of a fresh tab.
                      Anything else is not ours. Never asks, never reopens.
@@ -50,8 +84,9 @@ RUNG 4  Entry rules  First match over a compiler-ordered list. External rules fo
 RUNG 5  Ask          Only when a rule says so. Never a fallback.
 RUNG 6  Leave alone  A named rung, not an else-branch. Every unknown lands here.
         ─────────────
-OUT     Human override — "Reopen this tab in <container>", on an explicit gesture.
-        The only path by which a rule may touch a flow that already exists.
+OUT     Human override — "Reopen this tab in <container>", on the tab's own
+        context menu. The only path by which a tab that already exists can be
+        moved, and it reads no rule to do it.
 ```
 
 Read it in full in [docs/architecture.md](docs/architecture.md); the reasoning
@@ -66,7 +101,8 @@ per decision is in [docs/adr/](docs/adr/).
   session-scoped plus a snippet you paste into that repo. Nothing the extension
   can write can outlive the browser — that is what makes drift impossible.
 - **Not live.** Firefox reads a managed manifest once per extension start. The
-  popup shows the loaded revision and its age rather than pretending otherwise.
+  popup shows which revision is loaded rather than pretending otherwise, and
+  Reload is how you make a fresh one take effect.
 - **Not a prompt.** For links arriving from outside the browser, asking belongs
   to [linkward](https://github.com/sapn95/linkward). The compiler refuses a
   config that would give commander a second prompt on the same territory.
@@ -74,18 +110,52 @@ per decision is in [docs/adr/](docs/adr/).
 
 ## Repository layout
 
-|                           |                                                            |
-| ------------------------- | ---------------------------------------------------------- |
-| `docs/architecture.md`    | the full design, post-adversarial                          |
-| `docs/failure-catalog.md` | the seven observed failures, each an executable regression |
-| `docs/adr/`               | one file per decision a reviewer would question            |
-| `docs/protocol.md`        | the four-message claim protocol                            |
-| `tests/`                  | the specification, as failing tests                        |
-| `src/lib/engine.js`       | the pure core — does not exist yet, by design              |
+|                           |                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------ |
+| `src/lib/engine.js`       | the pure core: `decide(input) → Decision`, no browser APIs, no clock                       |
+| `src/background.js`       | the event page — arming, input assembly, and carrying out a `Decision`                     |
+| `tests/`                  | the specification, executable; the code was written to satisfy it                          |
+| `scripts/`                | the build, the artwork generators, and the allowlist that keeps this repo employer-neutral |
+| `docs/architecture.md`    | the full design, post-adversarial                                                          |
+| `docs/failure-catalog.md` | six failures observed in production, plus the platform terrain behind them                 |
+| `docs/adr/`               | one file per decision a reviewer would question                                            |
+| `docs/protocol.md`        | the four-message claim protocol                                                            |
+| `docs/publishing.md`      | how a release reaches AMO — and why the policy file never does                             |
+| `docs/store/`             | the AMO listing metadata and the screenshots the release uploads with it                   |
+| `assets/`                 | the picture above, regenerated from the real popup by `npm run art`                        |
+| `PRIVACY.md`              | what it looks at, what it keeps, and what it sends                                         |
+| `LICENSE`                 | MIT                                                                                        |
+
+## Development
+
+```bash
+npm ci
+npm test                # vitest
+npm run test:coverage   # vitest + v8 coverage
+npm run lint            # eslint
+npm run lint:leaks      # the allowlist that keeps employer identifiers out
+npm run format          # prettier --write
+npm run icons           # regenerate src/icons/*.png
+npm run art             # regenerate the screenshots, from the real popup
+npm run build           # -> dist/
+npm run package         # dist/ + container-commander-vX.Y.Z.zip
+npm run ci              # lint + leaks + format + coverage + package, the gate CI runs
+npm run amo:art         # push the icon and screenshots to the AMO listing (needs credentials)
+```
+
+No bundler and no runtime dependencies: the source under `src/` **is** the
+artifact, and `scripts/build.mjs` only copies it and stamps the version. An
+extension that decides which identity your tabs open in should be readable end
+to end by whoever reviews it, in the store and out of it.
+
+[CI](.github/workflows/ci.yml) runs that gate on every pull request and then
+`web-ext lint` over `dist/`, which is the check AMO itself runs — a package the
+store would reject should go red here rather than in review.
 
 ## Installing
 
-There is nothing to install from a store yet. To run it from a checkout:
+Not on addons.mozilla.org yet — v0.2.0 is submitted and in review. Until Mozilla
+lists it, run it from a checkout:
 
 ```bash
 npm ci && npm run build
@@ -99,6 +169,20 @@ toolbar badge. That is not a broken install: the extension ships no rules by
 design, and the policy arrives from your own config repository as a managed
 storage file — see [docs/publishing.md](docs/publishing.md#the-policy-file-is-not-part-of-the-release).
 
+It makes no network requests of its own, and everything it remembers dies with
+the browser: [PRIVACY.md](PRIVACY.md).
+
+![The container commander popup. Under POLICY, the loaded revision — policy-2026.08.16-a1b2c3d, carrying the date it was compiled, because managed storage is read once per extension start and that date is the only honest answer to "is my edit live yet" — then 11 rule(s), a Reload policy button and a Pause for this session button, and the line that an emergency stop is Pause or disabling the add-on, never an emergency edit to the policy. Under RECENT DECISIONS, the last six, each an address followed by the verdict as action and the rung that settled it: flow.example-corp.com reopen·4, login.example-idp.com/oauth2/authorize leave·2, console.example-cloud.com leave·1, eu-1.console.example-cloud.com leave·4, docs.example.com leave·2, and intranet.example.com leave·0. Five of the six were left alone, which is the ordinary case. The reason behind each verdict is a hover tooltip and is not shown here.](assets/popup.png)
+
+That popup is all there is to operate — which revision is loaded, and the last
+decisions with the rung each was settled on, including and mostly the ones it
+left alone. There is no settings screen, because the rules are not the
+extension's to change. (The one other screen is the RUNG 5 picker, and it only
+appears when a rule explicitly asks for it.)
+
+A real capture of the running popup, with a policy staged for the picture: the
+addresses are the failure catalogue's own.
+
 ## Licence
 
-MIT.
+[MIT](LICENSE).

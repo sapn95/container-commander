@@ -16,7 +16,9 @@
     "ci": "npm run lint && npm run lint:leaks && npm run format:check && npm run test:coverage && npm run package",
     "build": "node scripts/build.mjs",
     "package": "node scripts/build.mjs --zip",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "art": "bash scripts/make-art.sh",
+    "amo:art": "node scripts/amo-art.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

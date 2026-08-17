@@ -1,0 +1,195 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        width: 900px;
+        font:
+          14px/1.45 -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+        background: #fff;
+        color: #16181d;
+        padding: 34px 40px 30px;
+      }
+      h1 {
+        font-size: 15px;
+        margin: 0 0 4px;
+        letter-spacing: -0.01em;
+      }
+      .sub {
+        color: #5b6270;
+        margin: 0 0 26px;
+        font-size: 13px;
+      }
+      .case + .case {
+        margin-top: 26px;
+      }
+      .tag {
+        display: inline-block;
+        font-size: 11px;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 4px;
+        margin-bottom: 9px;
+      }
+      .before .tag {
+        background: #fde8e8;
+        color: #9b1c1c;
+      }
+      .after .tag {
+        background: #e3f5ec;
+        color: #08603f;
+      }
+      .bars {
+        display: flex;
+        gap: 14px;
+      }
+      .bar {
+        flex: 1;
+        border-radius: 9px;
+        padding: 11px 15px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        border: 1px solid transparent;
+      }
+      .bar.light {
+        background: #f4f4f6;
+        border-color: #e2e3e8;
+      }
+      .bar.dark {
+        background: #2b2a33;
+      }
+      .bar img {
+        width: 16px;
+        height: 16px;
+        display: block;
+      }
+      .bar .url {
+        flex: 1;
+        height: 20px;
+        border-radius: 5px;
+      }
+      .bar.light .url {
+        background: #fff;
+        border: 1px solid #e2e3e8;
+      }
+      .bar.dark .url {
+        background: #1c1b22;
+      }
+      .verdict {
+        margin-top: 9px;
+        font-size: 13px;
+        color: #5b6270;
+      }
+      .verdict b {
+        color: #16181d;
+        font-weight: 600;
+      }
+      footer {
+        margin-top: 28px;
+        padding-top: 18px;
+        border-top: 1px solid #e6e7eb;
+        display: flex;
+        align-items: flex-end;
+        gap: 22px;
+      }
+      footer figure {
+        margin: 0;
+        text-align: center;
+        font-size: 11px;
+        color: #868c99;
+      }
+      footer img {
+        display: block;
+        margin: 0 auto 6px;
+      }
+      footer p {
+        margin: 0;
+        font-size: 12.5px;
+        color: #5b6270;
+        max-width: 430px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Three extensions by the same author, on the same toolbar</h1>
+    <p class="sub">
+      Actual pixels at 16&times;16 — the size that decides whether an icon works.<br />
+      Left to right in every bar: <b>beeline</b>, <b>linkward</b>, <b>container commander</b>.
+    </p>
+
+    <div class="case before">
+      <span class="tag">before</span>
+      <div class="bars">
+        <div class="bar light">
+          <img src="beeline-16.png" />
+          <img src="linkward-16.png" />
+          <img src="icon-previous-16.png" />
+          <span class="url"></span>
+        </div>
+        <div class="bar dark">
+          <img src="beeline-16.png" />
+          <img src="linkward-16.png" />
+          <img src="icon-previous-16.png" />
+          <span class="url"></span>
+        </div>
+      </div>
+      <p class="verdict">
+        linkward and commander shared <b>the same gradient, byte for byte</b>, and the same
+        white-and-amber ink. Commander&rsquo;s three 1.8&thinsp;px lanes merged into a comb.
+      </p>
+    </div>
+
+    <div class="case after">
+      <span class="tag">after</span>
+      <div class="bars">
+        <div class="bar light">
+          <img src="beeline-16.png" />
+          <img src="linkward-16.png" />
+          <img src="icon-16.png" />
+          <span class="url"></span>
+        </div>
+        <div class="bar dark">
+          <img src="beeline-16.png" />
+          <img src="linkward-16.png" />
+          <img src="icon-16.png" />
+          <span class="url"></span>
+        </div>
+      </div>
+      <p class="verdict">
+        Separated on hue first, then on silhouette: red squares, a blue stroke, green discs.
+      </p>
+    </div>
+
+    <footer>
+      <figure><img src="icon-16.png" width="16" />16</figure>
+      <figure><img src="icon-32.png" width="32" />32</figure>
+      <figure><img src="icon-48.png" width="48" />48</figure>
+      <figure><img src="icon-64.png" width="64" />64</figure>
+      <figure><img src="icon-128.png" width="128" />128</figure>
+      <p>
+        One white disc above two dark ones. The unpicked two are <b>darker</b> than the badge, not
+        paler: an empty place is evidence that something acted, where a dimmer lamp is a status
+        indicator — and a status indicator invites the click this extension refuses to honour.
+      </p>
+    </footer>
+    <script>
+      // On load, not at parse: the 128px icon has no laid-out height until it
+      // has actually decoded, and measuring early reports a footer that is not
+      // there yet — which crops exactly the part the picture is about.
+      window.addEventListener('load', () => {
+        document.title = 'h:' + (Math.ceil(document.body.getBoundingClientRect().bottom) + 24);
+      });
+    </script>
+  </body>
+</html>

@@ -92,12 +92,34 @@ function makeChrome({ granted = true, policy = POLICY, windows = true } = {}) {
   return c;
 }
 
-async function boot(options) {
+/** The menu, faked to the two calls buildMenu() makes plus the click event. */
+function makeMenus() {
+  const items = [];
+  return {
+    items,
+    onClicked: makeEvent(),
+    removeAll: async () => {
+      items.length = 0;
+    },
+    create: (spec) => items.push(spec),
+  };
+}
+
+async function boot(options = {}) {
+  const { containers = [{ name: 'work', cookieStoreId: 'firefox-container-2' }], menusApi = true } =
+    options;
   globalThis.chrome = makeChrome(options);
   globalThis.browser = {
     contextualIdentities: {
-      query: async () => [{ name: 'work', cookieStoreId: 'firefox-container-2' }],
+      query: async () => containers,
+      onCreated: makeEvent(),
+      onRemoved: makeEvent(),
+      onUpdated: makeEvent(),
     },
+    // browser.menus, not chrome.menus: the chrome namespace only ever exposed
+    // contextMenus, and in Firefox those are two different permissions. A fake
+    // on the wrong namespace would let a broken build pass.
+    ...(menusApi ? { menus: makeMenus() } : {}),
   };
   vi.resetModules();
   await import('../src/background.js');
@@ -409,5 +431,152 @@ describe('the toolbar button', () => {
     const c = await boot();
     await c.action.onClicked.emit({});
     expect(c.runtime.openOptionsPage).toHaveBeenCalled();
+  });
+});
+
+describe('the human override', () => {
+  // "Reopen this tab in ‹container›" was documented, and the manifest asked for
+  // the `menus` permission to serve it, for two releases before anything
+  // registered the command. Nothing failed; the menu simply was not there, and
+  // an unused permission is a flag in store review. So the registration itself
+  // is what most of this tests.
+
+  const clickItem = (menu, id, tab) => menu.onClicked.emitSync({ menuItemId: id }, tab);
+  const inContainer = { id: 7, url: 'https://example.com/doc', cookieStoreId: 'firefox-default' };
+
+  it('registers the click listener without waiting for anything', async () => {
+    // The event page can only be woken for listeners present on its first
+    // synchronous run. Registered from inside the async menu build instead, a
+    // click on a slept-out page would do nothing at all.
+    globalThis.chrome = makeChrome();
+    const menu = makeMenus();
+    globalThis.browser = { contextualIdentities: { query: async () => [] }, menus: menu };
+    vi.resetModules();
+    await import('../src/background.js');
+    expect(menu.onClicked.size()).toBe(1);
+  });
+
+  it('offers every container, plus a way back out of all of them', async () => {
+    await boot({
+      containers: [
+        { name: 'work', cookieStoreId: 'firefox-container-2' },
+        { name: 'personal', cookieStoreId: 'firefox-container-3' },
+      ],
+    });
+    const titles = globalThis.browser.menus.items.map((i) => i.title);
+    expect(titles).toEqual(['Reopen this tab in…', 'work', 'personal', 'No container']);
+  });
+
+  it('only offers itself on http(s) pages', async () => {
+    // There is nothing to reopen about an about: page, and a container is not a
+    // property it has.
+    await boot();
+    const [parent] = globalThis.browser.menus.items;
+    expect(parent.documentUrlPatterns).toEqual(['http://*/*', 'https://*/*']);
+    expect(parent.contexts).toContain('tab');
+  });
+
+  it('reopens the tab in the chosen container and closes the old one', async () => {
+    const c = await boot();
+    await clickItem(globalThis.browser.menus, 'cc:reopen:firefox-container-2', inContainer);
+    await settle(20);
+    expect(c.tabs.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: 'https://example.com/doc',
+        cookieStoreId: 'firefox-container-2',
+      }),
+    );
+    expect(c.tabs.remove).toHaveBeenCalledWith(7);
+  });
+
+  it('announces the claim before the tab exists', async () => {
+    // Otherwise linkward sees a fresh, opener-less http tab and offers a picker
+    // for a tab this extension has just deliberately placed.
+    const c = await boot();
+    await clickItem(globalThis.browser.menus, 'cc:reopen:firefox-container-2', inContainer);
+    await settle(20);
+    const order = c.runtime.sendMessage.mock.calls.map(([, msg]) => msg.type);
+    expect(order.indexOf('cc:claim')).toBeLessThan(order.indexOf('cc:opened'));
+  });
+
+  it('moves a tab out of a container without naming one', async () => {
+    // cookieStoreId has to be ABSENT rather than empty: the schema validator
+    // rejects a falsy one, so "No container" would fail on the way out.
+    const c = await boot();
+    await clickItem(globalThis.browser.menus, 'cc:reopen:', {
+      ...inContainer,
+      cookieStoreId: 'firefox-container-2',
+    });
+    await settle(20);
+    const [spec] = c.tabs.create.mock.calls.at(-1);
+    expect('cookieStoreId' in spec).toBe(false);
+  });
+
+  it('does nothing when the tab is already in that container', async () => {
+    // Reopening would cost the tab its history and its scroll position to
+    // arrive exactly where it started.
+    const c = await boot();
+    await clickItem(globalThis.browser.menus, 'cc:reopen:firefox-container-2', {
+      ...inContainer,
+      cookieStoreId: 'firefox-container-2',
+    });
+    await settle(20);
+    expect(c.tabs.create).not.toHaveBeenCalled();
+    expect(c.tabs.remove).not.toHaveBeenCalled();
+  });
+
+  it('leaves a privileged page alone', async () => {
+    const c = await boot();
+    await clickItem(globalThis.browser.menus, 'cc:reopen:firefox-container-2', {
+      id: 7,
+      url: 'about:config',
+    });
+    await settle(20);
+    expect(c.tabs.create).not.toHaveBeenCalled();
+  });
+
+  it('ignores a menu item that is not one of ours', async () => {
+    // The menus API delivers every click in the browser to every listener.
+    const c = await boot();
+    await clickItem(globalThis.browser.menus, 'someone-elses-item', inContainer);
+    await settle(20);
+    expect(c.tabs.create).not.toHaveBeenCalled();
+  });
+
+  it('records the override in the log, named, and off the ladder', async () => {
+    // The popup's list is the product. An override that happened invisibly
+    // would be the one decision it could not account for.
+    const c = await boot();
+    await clickItem(globalThis.browser.menus, 'cc:reopen:firefox-container-2', inContainer);
+    await settle(20);
+    const status = await new Promise((resolve) => {
+      c.runtime.onMessage.emitSync({ type: 'cc:status' }, {}, resolve);
+    });
+    expect(status.log[0].decision).toMatchObject({
+      action: 'reopen',
+      reason: 'human-override',
+      rung: -1,
+    });
+  });
+
+  it('rebuilds the menu when the containers change', async () => {
+    // Renamed and deleted by hand, and a menu built once goes stale offering
+    // somewhere that no longer exists.
+    await boot();
+    const menu = globalThis.browser.menus;
+    const before = menu.items.length;
+    expect(before).toBeGreaterThan(0);
+    await globalThis.browser.contextualIdentities.onUpdated.emit({});
+    await settle(20);
+    expect(menu.items.length).toBe(before);
+    expect(menu.items[0].title).toBe('Reopen this tab in…');
+  });
+
+  it('survives a browser with no menus API at all', async () => {
+    // Everything else this extension does has to keep working.
+    const c = await boot({ menusApi: false });
+    expect(globalThis.browser.menus).toBeUndefined();
+    await c.tabs.onCreated.emit({ id: 7, url: 'https://example.com/doc' });
+    expect(await request(c)).toEqual({ cancel: true });
   });
 });

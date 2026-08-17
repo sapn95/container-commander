@@ -2,3 +2,4 @@ node_modules/
 coverage/
 dist/
 *.zip
+docs/store/screenshot-1x.png
