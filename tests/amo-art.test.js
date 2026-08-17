@@ -26,7 +26,7 @@ const SCRIPT = 'scripts/amo-art.mjs';
 const FAKE = 'tests/helpers/fake-amo.mjs';
 const SCREENSHOTS = ['01-first.png', '02-second.png'];
 
-// The uploader reads dist/ and docs/store/, so it is run from a fixture tree
+// The uploader reads dist/ and docs/store/amo/, so it is run from a fixture tree
 // rather than from this checkout. Two reasons, and the second is the one that
 // bit: `npm run ci` runs the tests BEFORE it packages, so on a clean clone
 // there is no dist/ at all and every one of these failed at "dist/ is not
@@ -39,7 +39,7 @@ beforeAll(() => {
   mkdirSync(join(ROOT, 'scripts'), { recursive: true });
   mkdirSync(join(ROOT, 'tests', 'helpers'), { recursive: true });
   mkdirSync(join(ROOT, 'dist', 'icons'), { recursive: true });
-  mkdirSync(join(ROOT, 'docs', 'store'), { recursive: true });
+  mkdirSync(join(ROOT, 'docs', 'store', 'amo'), { recursive: true });
 
   cpSync(SCRIPT, join(ROOT, SCRIPT));
   cpSync(FAKE, join(ROOT, FAKE));
@@ -52,10 +52,18 @@ beforeAll(() => {
   // point of that assertion is the Blob wrapper, not the file.
   const png = readFileSync('src/icons/icon-128.png');
   writeFileSync(join(ROOT, 'dist', 'icons', 'icon-128.png'), png);
-  for (const name of SCREENSHOTS) writeFileSync(join(ROOT, 'docs', 'store', name), png);
-  // A sibling that is NOT two-digit-prefixed, to prove the glob is a filter and
-  // not just a sort.
-  writeFileSync(join(ROOT, 'docs', 'store', 'screenshot-1x.png'), png);
+  for (const name of SCREENSHOTS) writeFileSync(join(ROOT, 'docs', 'store', 'amo', name), png);
+  // An unnumbered file INSIDE the AMO directory, to prove the pattern is a
+  // filter and not just a sort. A directory of its own is not a promise about
+  // its contents: a 1x export dropped in by hand, a candidate nobody chose, a
+  // second size of the same shot all land here the same way.
+  writeFileSync(join(ROOT, 'docs', 'store', 'amo', 'screenshot-1x.png'), png);
+  // And a numbered one OUTSIDE it, which is the reason the set moved into a
+  // directory at all. The sibling repos ship to Chrome and AMO out of one
+  // docs/store/, where a Chrome shot sits numbered beside its Firefox twin; a
+  // pattern applied to the shared directory posts it to Mozilla, at a colliding
+  // position. What keeps it out is where it is, so that is what this asserts on.
+  writeFileSync(join(ROOT, 'docs', 'store', '01-popup-chrome.png'), png);
 });
 
 afterAll(() => rmSync(ROOT, { recursive: true, force: true }));
@@ -137,7 +145,7 @@ describe('running it without credentials', () => {
   });
 
   it('gets no further than the credential check, so an unbuilt tree is fine too', () => {
-    // Run a copy from a directory that has no dist/ and no docs/store/. If the
+    // Run a copy from a directory that has no dist/ and no docs/store/amo/. If the
     // order of the checks ever slips, this throws with ENOENT — which on a
     // release day would read as a broken build rather than an unconfigured one.
     const root = mkdtempSync(join(tmpdir(), 'amo-art-'));
@@ -189,10 +197,12 @@ describe('replacing the screenshots', () => {
     expect(posted.map((c) => c.parts.position)).toEqual(['0', '1']);
   });
 
-  it('uploads the numbered PNGs and nothing else in the directory', () => {
-    // The fixture also holds screenshot-1x.png, which make-art.sh writes as an
-    // intermediate. A glob that swept it up would post the same picture to the
-    // store twice, at a different size.
+  it('uploads the numbered PNGs in the AMO directory and nothing else anywhere', () => {
+    // Two files can break this count, and they are the two halves of the
+    // convention. The unnumbered one inside docs/store/amo/ would post the same
+    // picture twice at a different size; the numbered one outside it would post
+    // another store's screenshot to Mozilla. Only the second is a filename this
+    // repository has no way to control, which is why the answer is a directory.
     const { calls } = run('happy');
     const posted = calls.filter((c) => c.method === 'POST');
 
@@ -220,8 +230,20 @@ describe('stopping early', () => {
 
     expect(status).not.toBe(0);
     expect(stdout).toContain('::error::');
+    // and it says WHICH state the listing is in, which is the only part of this
+    // a human can act on. fail() printed the status code and nothing else until a
+    // review pointed out that skip() said it and the commoner path did not.
+    expect(stdout).toMatch(/already been changed|did not finish/i);
     // and, crucially, it got nowhere near the deletions
     expect(methods(calls)).not.toContain('DELETE');
+  });
+
+  it('says plainly when a failure left the listing untouched', () => {
+    // The other half. A run that failed before changing anything needs no
+    // follow-up, and not saying so invites somebody to go and check by hand.
+    const { status, stdout } = run('unauthorized');
+    expect(status).not.toBe(0);
+    expect(stdout).toMatch(/Nothing on the listing was changed/i);
   });
 
   it('never deletes anything when an upload is refused outright', () => {

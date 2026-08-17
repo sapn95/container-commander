@@ -53,6 +53,11 @@ globalThis.fetch = async (url, init = {}) => {
     return json(200, { slug: 'container-commander', previews: existing });
   }
 
+  // A revoked or mistyped key. It reaches fail() with nothing yet changed, which
+  // is the only combination that exercises the "nothing was changed" message —
+  // and a revoked AMO key is not hypothetical here.
+  if (scenario === 'unauthorized') return json(401, { detail: 'Invalid credentials.' });
+
   if (method === 'PATCH') {
     if (scenario === 'iconDown')
       return json(503, { error: 'Add-on uploads are temporarily unavailable.' });

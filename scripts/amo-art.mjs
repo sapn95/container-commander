@@ -7,10 +7,10 @@
 // Screenshots have a separate collection endpoint again.
 //
 // Declarative rather than incremental: the desired set is whatever numbered
-// PNGs are in docs/store/, and every run replaces the previews that are there
-// with that set. Replacing means posting and then deleting, because this API
-// has no image replace at all — PATCH on a preview accepts a new image, answers
-// 200, and keeps the old one.
+// PNGs are in docs/store/amo/, and every run replaces the previews that are
+// there with that set. Replacing means posting and then deleting, because this
+// API has no image replace at all — PATCH on a preview accepts a new image,
+// answers 200, and keeps the old one.
 //
 // Post first, delete second, and never the other way round. Deleting first
 // reads better and is the version that got written, but it puts a window in the
@@ -37,13 +37,25 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const STORE = join(ROOT, 'docs', 'store');
+
+// The screenshots this listing carries, and the directory is what says so. The
+// two sibling extensions run this same script and ship to Chrome as well, out of
+// one docs/store/ — linkward already holds 01-picker.png beside
+// 01-picker-chrome.png, both numbered, both matching the pattern below, and only
+// one of them Mozilla's. No pattern can be taught which, and a suffix rule holds
+// only until somebody names a file the other way round, so what a picture is for
+// is decided by where it is kept. This repository has one store and would have
+// been safe either way; it uses the same layout so the three are one thing to
+// learn, and so the reference implementation is the one that demonstrates it.
+const AMO_STORE = join(ROOT, 'docs', 'store', 'amo');
 const DIST = join(ROOT, 'dist');
 const API = 'https://addons.mozilla.org/api/v5';
 
 // The screenshots, in the order the listing shows them. The two-digit prefix is
 // what makes a plain lexical sort the right one; `1-`, `2-`, `10-` would put the
-// tenth in second place.
+// tenth in second place. Still a filter and not only a sort: a directory of its
+// own is not a promise about its contents, and an unnumbered file in here — a
+// 1x export, a candidate nobody chose — is one somebody has not put in the set.
 const NUMBERED = /^\d{2}-.+\.png$/;
 
 // AMO's ceiling on a token's lifetime. A token thrown away after one request
@@ -143,6 +155,16 @@ const imagePart = (file) => new Blob([readFileSync(file)], { type: 'image/png' }
 function fail(what, res) {
   console.error(`::error::${what}: HTTP ${res.status}`);
   console.error(res.text);
+  // Which state the listing is in matters more than the status code, and this is
+  // the path almost every mid-sync failure takes — skip() says it and fail() did
+  // not, so the one message that tells you whether to go and look was missing
+  // from the common case.
+  console.error(
+    mutated
+      ? 'The listing has already been changed and this sync did not finish. ' +
+          'Re-run the release workflow, or `npm run amo:art`, to complete it.'
+      : 'Nothing on the listing was changed.',
+  );
   process.exit(1);
 }
 
@@ -284,9 +306,15 @@ async function main() {
   // GET on the previews collection is a 405: the current set is only ever
   // readable from the add-on detail.
   const previews = detail.json?.previews ?? [];
-  const screenshots = readdirSync(STORE)
-    .filter((f) => NUMBERED.test(f))
-    .sort();
+  // A directory holding nothing but the set is a directory that stops existing
+  // in a fresh clone once the last screenshot leaves it, so a missing one has to
+  // mean what an empty one means. Reading it blind would answer that case with
+  // an ENOENT stack trace instead of the warning written for it below.
+  const screenshots = existsSync(AMO_STORE)
+    ? readdirSync(AMO_STORE)
+        .filter((f) => NUMBERED.test(f))
+        .sort()
+    : [];
 
   // Refuse rather than warn, and refuse HERE — before the first request that
   // changes anything. A run that knows it will be throttled off the end is a run
@@ -321,7 +349,7 @@ async function syncScreenshots(amo, addon, previews, screenshots) {
     // Deliberately NOT read as "this listing wants no screenshots". An empty
     // match is far more often a wrong working directory than a decision, and the
     // difference only becomes visible once the store page has already gone bare.
-    console.log('::warning::No numbered PNGs in docs/store/ — leaving the screenshots alone.');
+    console.log('::warning::No numbered PNGs in docs/store/amo/ — leaving the screenshots alone.');
     return;
   }
 
@@ -331,7 +359,7 @@ async function syncScreenshots(amo, addon, previews, screenshots) {
   // the old screenshots untouched and the page still working.
   for (const [position, file] of screenshots.entries()) {
     const form = new FormData();
-    form.append('image', imagePart(join(STORE, file)), file);
+    form.append('image', imagePart(join(AMO_STORE, file)), file);
     // Explicit, ascending, and set at creation: position is the only ordering
     // AMO honours, and left out it falls back to upload order — which a retry of
     // a half-finished run would then get wrong. Colliding with the outgoing set's

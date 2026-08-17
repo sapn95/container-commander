@@ -121,7 +121,8 @@ per decision is in [docs/adr/](docs/adr/).
 | `docs/adr/`               | one file per decision a reviewer would question                                            |
 | `docs/protocol.md`        | the four-message claim protocol                                                            |
 | `docs/publishing.md`      | how a release reaches AMO — and why the policy file never does                             |
-| `docs/store/`             | the AMO listing metadata and the screenshots the release uploads with it                   |
+| `docs/store/`             | the AMO listing metadata, and the staged redraw the screenshots are captured from          |
+| `docs/store/amo/`         | the screenshots the release uploads, in filename order — a directory per store             |
 | `assets/`                 | the picture above, regenerated from the real popup by `npm run art`                        |
 | `PRIVACY.md`              | what it looks at, what it keeps, and what it sends                                         |
 | `LICENSE`                 | MIT                                                                                        |
