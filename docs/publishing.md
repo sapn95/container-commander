@@ -61,6 +61,12 @@ never reaches `main`.
 ## The listing art
 
 `npm run amo:art`, run by the release workflow immediately after the sign step.
+
+It is also the recovery path, and it is safe to run by hand. Every run
+replaces the whole set rather than adding to it, so a sync that stopped —
+because AMO was read-only, because the add-on did not exist yet, or because a
+request timed out — is finished by running it again with the credentials in the
+environment. There is nothing to undo first.
 It uploads `dist/icons/icon-128.png` as the listing icon and every numbered PNG
 in [`docs/store/`](store/) — `01-*.png`, `02-*.png`, … — as the screenshots, in
 filename order.
