@@ -1,6 +1,6 @@
 {
   "name": "container-commander",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "One thing decides which Firefox container a tab opens in — once, at entry.",
   "type": "module",
