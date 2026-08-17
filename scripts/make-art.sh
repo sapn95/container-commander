@@ -247,3 +247,44 @@ PICK_H=$(printf '%s' "$PICK_DOM" | sed -n 's/.*cc-height:\([0-9]*\).*/\1/p' | he
 capture "$ROOT/docs/store/02-picker.png" 640 "$PICK_H" "$PICK_URL" \
   --allow-file-access-from-files --force-device-scale-factor=2
 assert_size "$ROOT/docs/store/02-picker.png" 1280 $((PICK_H * 2))
+
+# The evidence behind the mark: the three extensions that share a toolbar, at
+# the size they are actually seen, before and after. It is a picture rather than
+# a paragraph because "these two are the same blue" is not a claim anyone should
+# have to take on trust.
+#
+# The two siblings are separate repositories, so this is the one thing here that
+# can genuinely be unbuildable. Missing them is a skip and not a failure: the
+# rendered PNG is committed, and a checkout that cannot regenerate it is still a
+# complete extension.
+echo "make-art: brand comparison (docs/brand/)"
+SIBLINGS_OK=1
+for sib in beeline linkward; do
+  [ -f "$ROOT/../$sib/src/icons/icon-16.png" ] || SIBLINGS_OK=0
+done
+
+if [ "$SIBLINGS_OK" = 0 ]; then
+  echo "  skipped: needs ../beeline and ../linkward checked out beside this repo"
+else
+  mkdir -p "$STAGE/brand"
+  cp "$ROOT/docs/brand/toolbar.html" "$STAGE/brand/"
+  cp "$ROOT/docs/brand/icon-previous-16.png" "$STAGE/brand/"
+  cp "$ROOT/src/icons/"icon-*.png "$STAGE/brand/"
+  cp "$ROOT/../beeline/src/icons/icon-16.png" "$STAGE/brand/beeline-16.png"
+  cp "$ROOT/../linkward/src/icons/icon-16.png" "$STAGE/brand/linkward-16.png"
+
+  # Measured on load rather than at parse. The 128px icon has no laid-out height
+  # until it has decoded, so an early measurement reports a footer that is not
+  # there yet and crops off the part the picture is about.
+  BRAND_URL="file://$STAGE/brand/toolbar.html"
+  BRAND_H=$("$CHROME" --headless=new --disable-gpu --hide-scrollbars --no-first-run \
+    --allow-file-access-from-files --window-size=900,2400 --dump-dom "$BRAND_URL" 2>/dev/null |
+    grep -o '<title>h:[0-9]*' | grep -o '[0-9]*$')
+  [ -n "$BRAND_H" ] || {
+    echo 'make-art: could not measure the brand sheet' >&2
+    exit 1
+  }
+  capture "$ROOT/docs/brand/toolbar.png" 900 "$BRAND_H" "$BRAND_URL" \
+    --allow-file-access-from-files --force-device-scale-factor=2
+  assert_size "$ROOT/docs/brand/toolbar.png" 1800 $((BRAND_H * 2))
+fi
