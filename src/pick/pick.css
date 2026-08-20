@@ -147,3 +147,72 @@ section h2 {
 .version a {
   color: var(--muted);
 }
+
+/* --- The setup screen -----------------------------------------------------
+   Only ever shown when no policy is installed, which for a new install is the
+   whole page. It is laid out as steps rather than prose because the reader is
+   not here to understand the design yet — they are here to make the thing work,
+   and the design is one link away when they want it. */
+
+.lead {
+  margin: 0 0 16px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.steps {
+  margin: 0 0 18px;
+  padding-left: 22px;
+}
+
+.steps li {
+  margin-bottom: 18px;
+}
+
+.steps li p {
+  margin: 0 0 8px;
+}
+
+/* Selectable and wrapping: the path is long, and the reader's first instinct is
+   to drag across it rather than find the button. */
+.sample {
+  margin: 0 0 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--fg) 4%, var(--bg));
+  font:
+    12px/1.55 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  white-space: pre;
+  overflow-x: auto;
+  user-select: text;
+}
+
+.copy {
+  padding: 5px 11px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.copy:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--fg) 8%, var(--bg));
+  font:
+    12px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
