@@ -1,5 +1,7 @@
 // Status, and the two affordances that make managed storage honest.
 
+import { hasWatchPermissions, requestWatchPermissions } from '../lib/permissions.js';
+
 const $ = (id) => document.getElementById(id);
 
 const status = await chrome.runtime.sendMessage({ type: 'cc:status' }).catch(() => null);
@@ -33,6 +35,32 @@ $('pause').addEventListener('click', async () => {
 });
 
 $('reload').addEventListener('click', () => chrome.runtime.reload());
+
+// Checked after the status, shown above it. Without this grant the extension is
+// structurally unable to decide anything, so it outranks every other thing this
+// page could be telling you — including "no policy installed".
+if (!(await hasWatchPermissions())) {
+  $('grant').hidden = false;
+  $('log-empty').textContent = 'Nothing can be decided until watching is turned on, above.';
+}
+
+$('grant-button').addEventListener('click', async (event) => {
+  // FIRST, before any await. A handler stops being user-initiated the moment it
+  // awaits anything, and permissions.request then fails with no explanation.
+  const granted = await requestWatchPermissions();
+  event.target.disabled = true;
+  if (granted) {
+    // permissions.onAdded arms the listener in the background page already, so
+    // there is nothing to restart — but the page in front of you is now stale.
+    $('grant-note').textContent = 'Granted. Reloading this page…';
+    location.reload();
+    return;
+  }
+  event.target.disabled = false;
+  $('grant-note').textContent =
+    'Firefox refused, or the request was dismissed. Nothing will be decided until it is allowed — ' +
+    'you can also grant it in about:addons under this add-on, on the Permissions tab.';
+});
 
 const entries = status?.log ?? [];
 $('log-empty').hidden = entries.length > 0;
