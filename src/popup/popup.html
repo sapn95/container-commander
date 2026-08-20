@@ -108,6 +108,30 @@
         </p>
       </section>
 
+      <!-- The rules, which the popup used to report as a number.
+           Worth the space for a reason that is not obvious: compile() re-orders
+           them by specificity, so the order here is the order they are actually
+           evaluated in — and it is NOT the order they appear in the file they
+           came from. There is nowhere else you can see it. -->
+      <section id="rules-section" hidden>
+        <h2>Rules</h2>
+        <p class="note">
+          Evaluated top to bottom, <b>first match wins</b>. The order is computed from how specific
+          each rule is, so it is not the order they sit in your policy file.
+        </p>
+        <ol class="rulelist" id="rulelist"></ol>
+
+        <div id="lists"></div>
+
+        <p class="note">
+          Read-only, and that is the design: nothing this add-on can write would survive a restart,
+          so there is nothing here to drift from wherever it came from. Edit them in
+        </p>
+        <p class="url" id="rules-path"></p>
+        <button class="copy" type="button" data-copy="rules-path">Copy path</button>
+        <p class="note">then press <b>Reload policy</b> above.</p>
+      </section>
+
       <section>
         <h2>Recent decisions</h2>
         <ul class="rules" id="log"></ul>

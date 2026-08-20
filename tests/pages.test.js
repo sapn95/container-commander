@@ -448,3 +448,126 @@ describe('the permission without which nothing can ever be decided', () => {
     expect($('grant').hidden).toBe(false);
   });
 });
+
+describe('the rules, which the popup used to report as a number', () => {
+  // "I cannot get at the rules, or look at them, or edit them" — and he was
+  // right: the page said "11 rule(s)" and stopped. Worth the space for a reason
+  // that is not obvious from the file either: compile() re-orders rules by
+  // specificity, so what is shown here is the evaluation order and it is NOT
+  // the order they sit in the source. There is nowhere else to see it.
+
+  const POLICY = {
+    revision: 'r1',
+    dryRun: true,
+    rules: [
+      {
+        id: 'idp',
+        scope: 'external',
+        match: { regex: '^https://login\\.example-idp\\.com/' },
+        to: 'work',
+      },
+      { id: 'wiki', scope: 'any', match: { host: 'wiki.example.com' }, to: 'work' },
+      { id: 'shared', scope: 'internal', match: { host: 'shared.example.com' }, to: 'ask' },
+    ],
+    never: ['console.example-cloud.com'],
+    authHosts: ['login.example-idp.com'],
+    bookmarks: { folders: [{ path: 'Toolbar/Work', to: 'work' }] },
+  };
+
+  async function mount(config) {
+    document.documentElement.innerHTML = html('src/popup/popup.html');
+    globalThis.location = { reload: vi.fn(), href: 'moz-extension://cc/popup/popup.html' };
+    globalThis.chrome = {
+      runtime: {
+        id: 'container-commander@sapn95.github.io',
+        getManifest: () => ({ version: '9.9.9' }),
+        reload: vi.fn(),
+        sendMessage: vi.fn(async () => ({
+          inert: false,
+          errors: [],
+          paused: false,
+          log: [],
+          config,
+        })),
+      },
+      permissions: { contains: async () => true, request: vi.fn() },
+    };
+    vi.resetModules();
+    await import('../src/popup/popup.js');
+    await settle();
+  }
+
+  const rows = () => [...document.querySelectorAll('#rulelist li')].map((li) => li.textContent);
+
+  it('lists every rule, in the order they are evaluated', async () => {
+    await mount(POLICY);
+    expect($('rules-section').hidden).toBe(false);
+    const text = rows();
+    expect(text).toHaveLength(3);
+    expect(text[0]).toContain('login');
+    expect(text[1]).toContain('wiki.example.com');
+  });
+
+  it('says where each one sends a tab, and marks the ones that ask', async () => {
+    await mount(POLICY);
+    expect(rows()[1]).toMatch(/→\s*work/);
+    expect(rows()[2]).toMatch(/→\s*ask/);
+    expect(document.querySelector('#rulelist .ask')).not.toBeNull();
+  });
+
+  it('carries the scope and the id, because that is what the log refers to', async () => {
+    await mount(POLICY);
+    expect(rows()[0]).toContain('external');
+    expect(rows()[0]).toContain('idp');
+  });
+
+  it('shows never and auth hosts too, which decide outcomes just as much', async () => {
+    // Leaving them off would make the rule list look like the whole policy.
+    await mount(POLICY);
+    const lists = $('lists').textContent;
+    expect(lists).toContain('console.example-cloud.com');
+    expect(lists).toContain('login.example-idp.com');
+    expect(lists).toContain('Toolbar/Work');
+  });
+
+  it('renders a rule as text and never as markup', async () => {
+    // A rule is a string out of a file this page did not write.
+    await mount({
+      ...POLICY,
+      rules: [
+        { id: 'x', scope: 'any', match: { host: '<img src=x onerror=alert(1)>' }, to: 'work' },
+      ],
+    });
+    expect(document.querySelector('#rulelist img')).toBeNull();
+    expect(rows()[0]).toContain('<img');
+  });
+
+  it('names the file to edit, since the add-on cannot write it', async () => {
+    await mount(POLICY);
+    expect($('rules-path').textContent).toContain('container-commander@sapn95.github.io');
+  });
+
+  it('stays hidden when there is no policy at all', async () => {
+    document.documentElement.innerHTML = html('src/popup/popup.html');
+    globalThis.location = { reload: vi.fn(), href: 'x' };
+    globalThis.chrome = {
+      runtime: {
+        id: 'x@y',
+        getManifest: () => ({ version: '9' }),
+        reload: vi.fn(),
+        sendMessage: vi.fn(async () => NO_POLICY),
+      },
+      permissions: { contains: async () => true, request: vi.fn() },
+    };
+    vi.resetModules();
+    await import('../src/popup/popup.js');
+    await settle();
+    expect($('rules-section').hidden).toBe(true);
+  });
+
+  it('survives a policy with no never list and no bookmarks', async () => {
+    await mount({ revision: 'r', dryRun: false, rules: [] });
+    expect($('rules-section').hidden).toBe(false);
+    expect(rows()).toEqual([]);
+  });
+});
