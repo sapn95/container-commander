@@ -81,15 +81,22 @@ capture() {
 
 echo "make-art: store screenshot (staged redraw, docs/store/screenshot.html)"
 STORE_URL="file://$ROOT/docs/store/screenshot.html"
-# 01-popup.png is the one the listing carries, at 2x. The 1x is kept for
-# anywhere that wants the plain size, and its name deliberately does NOT begin
-# with two digits: scripts/amo-art.mjs uploads every /^\d{2}-.+\.png$/ in this
-# directory as a screenshot, so a numbered sibling would post the same picture
-# to the store twice.
+# Chrome will not create a directory for a --screenshot path. Without this the
+# capture writes nothing and assert_size reports it as "Chrome exited without a
+# screenshot", which sends the reader looking at the browser.
+mkdir -p "$ROOT/docs/store/amo"
+# 01-popup.png is the one the listing carries, at 2x, and it sits in
+# docs/store/amo/ because scripts/amo-art.mjs uploads that DIRECTORY: where a
+# picture is kept is what says which store it is for. The 1x is kept for anywhere
+# that wants the plain size and stays out here, which is now the whole of what
+# keeps it off the listing — its name is free, and the two digits it avoids would
+# no longer collide with anything. Do not move it in beside its sibling to tidy
+# up: the numbers in there are positions on the store page, and this file is not
+# on the store page.
 capture "$ROOT/docs/store/screenshot-1x.png" 1280 800 "$STORE_URL"
 assert_size "$ROOT/docs/store/screenshot-1x.png" 1280 800
-capture "$ROOT/docs/store/01-popup.png" 1280 800 "$STORE_URL" --force-device-scale-factor=2
-assert_size "$ROOT/docs/store/01-popup.png" 2560 1600
+capture "$ROOT/docs/store/amo/01-popup.png" 1280 800 "$STORE_URL" --force-device-scale-factor=2
+assert_size "$ROOT/docs/store/amo/01-popup.png" 2560 1600
 
 echo "make-art: README popup (real capture, src/popup/*)"
 mkdir -p "$ROOT/assets"
@@ -244,9 +251,9 @@ PICK_H=$(printf '%s' "$PICK_DOM" | sed -n 's/.*cc-height:\([0-9]*\).*/\1/p' | he
   echo 'make-art: could not measure the picker height' >&2
   exit 1
 }
-capture "$ROOT/docs/store/02-picker.png" 640 "$PICK_H" "$PICK_URL" \
+capture "$ROOT/docs/store/amo/02-picker.png" 640 "$PICK_H" "$PICK_URL" \
   --allow-file-access-from-files --force-device-scale-factor=2
-assert_size "$ROOT/docs/store/02-picker.png" 1280 $((PICK_H * 2))
+assert_size "$ROOT/docs/store/amo/02-picker.png" 1280 $((PICK_H * 2))
 
 # The evidence behind the mark: the three extensions that share a toolbar, at
 # the size they are actually seen, before and after. It is a picture rather than

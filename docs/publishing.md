@@ -68,8 +68,15 @@ because AMO was read-only, because the add-on did not exist yet, or because a
 request timed out — is finished by running it again with the credentials in the
 environment. There is nothing to undo first.
 It uploads `dist/icons/icon-128.png` as the listing icon and every numbered PNG
-in [`docs/store/`](store/) — `01-*.png`, `02-*.png`, … — as the screenshots, in
-filename order.
+in [`docs/store/amo/`](store/amo/) — `01-*.png`, `02-*.png`, … — as the
+screenshots, in filename order.
+
+The **directory** is what marks a picture as this store's, not the name. The two
+sibling extensions run the same script and ship to Chrome as well, out of one
+`docs/store/` in which a numbered Chrome shot sits beside its Firefox twin — and
+no pattern can be taught which of the two Mozilla is meant to get. Inside
+`docs/store/amo/` the number decides only the position in the listing, and
+anything unnumbered in there is simply not in the set.
 
 It is **declarative**: each run deletes the previews that are on the listing and
 re-posts the whole set. Running it twice leaves the listing identical and
