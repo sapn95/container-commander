@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="../pick/pick.css" />
+    <title>container commander — rule builder</title>
+  </head>
+  <body>
+    <main>
+      <h1>Rule builder</h1>
+
+      <!-- It composes a policy file and hands it to you. It cannot save one,
+           and that is the feature rather than a missing half: a store this
+           add-on could write is a store that drifts from wherever it came from
+           and comes back after you delete it, which is the failure the whole
+           extension exists in response to. So the output is bytes, and where
+           they go is your decision. -->
+      <p class="lead">
+        This builds a policy file. It cannot install one — nothing this add-on writes would survive
+        a restart, which is what makes drift impossible. So it hands you the finished file and you
+        decide where it goes.
+      </p>
+
+      <section>
+        <h2>Add a rule</h2>
+        <div class="form">
+          <label for="pattern">Address</label>
+          <div class="row">
+            <select id="kind">
+              <option value="host">host is</option>
+              <option value="regex">URL matches</option>
+            </select>
+            <input id="pattern" type="text" placeholder="wiki.example.com" spellcheck="false" />
+          </div>
+
+          <label for="scope">When the tab starts</label>
+          <select id="scope">
+            <option value="any">any way at all</option>
+            <option value="external">handed over from another application</option>
+            <option value="internal">from inside the browser</option>
+          </select>
+
+          <label for="to">Open it in</label>
+          <select id="to"></select>
+
+          <label for="id">Name</label>
+          <input id="id" type="text" placeholder="wiki" spellcheck="false" />
+
+          <div class="choices">
+            <button id="add" type="button">Add this rule</button>
+          </div>
+          <p class="note" id="say"></p>
+        </div>
+      </section>
+
+      <section>
+        <h2>The policy so far</h2>
+        <p class="note" id="count"></p>
+        <ol class="rulelist" id="rulelist"></ol>
+      </section>
+
+      <section>
+        <h2>The file</h2>
+        <p class="note">
+          Save this as the file below, then press <b>Reload policy</b> on the add-on's page.
+        </p>
+        <p class="url" id="path"></p>
+        <button class="copy" type="button" data-copy="path">Copy path</button>
+        <pre class="sample" id="out"></pre>
+        <button class="copy" type="button" data-copy="out">Copy the file</button>
+      </section>
+
+      <p class="note version">
+        <a id="back" href="#">back to the add-on</a> ·
+        <a
+          href="https://github.com/sapn95/container-commander/blob/main/docs/configuration.md"
+          target="_blank"
+          rel="noreferrer"
+          >the full format</a
+        >
+      </p>
+    </main>
+    <script type="module" src="edit.js"></script>
+  </body>
+</html>

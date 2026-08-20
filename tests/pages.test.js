@@ -246,6 +246,7 @@ describe('the setup screen a new install lands on', () => {
     globalThis.chrome = {
       runtime: {
         id: 'container-commander@sapn95.github.io',
+        getURL: (path) => `moz-extension://cc/${path}`,
         getManifest: () => ({ version: '9.9.9' }),
         reload: vi.fn(),
         sendMessage: vi.fn(async (m) => (m?.type === 'cc:pause' ? { paused: m.paused } : status)),
@@ -366,6 +367,7 @@ describe('the permission without which nothing can ever be decided', () => {
     globalThis.chrome = {
       runtime: {
         id: 'container-commander@sapn95.github.io',
+        getURL: (path) => `moz-extension://cc/${path}`,
         getManifest: () => ({ version: '9.9.9' }),
         reload: vi.fn(),
         sendMessage: vi.fn(async (m) => (m?.type === 'cc:pause' ? { paused: m.paused } : status)),
@@ -480,6 +482,7 @@ describe('the rules, which the popup used to report as a number', () => {
     globalThis.chrome = {
       runtime: {
         id: 'container-commander@sapn95.github.io',
+        getURL: (path) => `moz-extension://cc/${path}`,
         getManifest: () => ({ version: '9.9.9' }),
         reload: vi.fn(),
         sendMessage: vi.fn(async () => ({

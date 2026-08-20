@@ -115,6 +115,31 @@ else:
 - **A rule on a host a launcher claims.** A claim outranks every rule, so such a
   rule would silently never fire.
 
+## Checking a policy before you install it
+
+```sh
+npm run policy:check path/to/file.json
+```
+
+It uses the extension's **own** `validateConfig` and `compile` — the same
+functions the browser runs — so a file it accepts is a file that loads, and the
+order it prints is the order that will be evaluated. It takes either the
+wrapper or a bare policy, and says which one it found: a bare policy saved to
+the managed path is ignored by Firefox without a word.
+
+That also makes it the thing to point an assistant at. The format is small
+enough to write from this page, and `policy:check` is how the writing gets
+verified rather than assumed.
+
+## Building one without writing JSON
+
+The add-on's page has a **rule builder**. It composes the file — validating each
+addition against the whole policy with the shipped validator, and showing where
+your rule lands in the compiled order — and then hands you the finished bytes.
+
+It has no save button, and that is the feature rather than a missing half. See
+the section above on why there is no writable rule store.
+
 ## Generating it instead of writing it
 
 Once there is more than a handful of rules, a hand-written JSON file is a thing
