@@ -221,6 +221,12 @@ function showRules(config) {
   if (dl.children.length) lists.append(dl);
 
   $('rules-path').textContent = managedPath().path;
+  // Optional-chained on purpose. The link is the least important thing on this
+  // page and the rule list is the most, so a browser that cannot answer must
+  // cost the link and not the list.
+  const builder = chrome.runtime.getURL?.('edit/edit.html');
+  if (builder) $('builder').href = builder;
+  else $('builder').remove();
   $('rules-section').hidden = false;
   wireCopyButtons();
 }

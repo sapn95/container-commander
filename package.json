@@ -2,7 +2,7 @@
   "name": "container-commander",
   "version": "0.3.0",
   "private": true,
-  "description": "One thing decides which Firefox container a tab opens in — once, at entry.",
+  "description": "One thing decides which Firefox container a tab opens in \u2014 once, at entry.",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -18,7 +18,8 @@
     "package": "node scripts/build.mjs --zip",
     "icons": "node scripts/make-icons.mjs",
     "art": "bash scripts/make-art.sh",
-    "amo:art": "node scripts/amo-art.mjs"
+    "amo:art": "node scripts/amo-art.mjs",
+    "policy:check": "node scripts/check-policy.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

@@ -274,3 +274,41 @@ code {
     monospace;
   word-break: break-all;
 }
+
+/* --- The rule builder ----------------------------------------------------- */
+
+.form label {
+  display: block;
+  margin: 12px 0 5px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.form input[type='text'],
+.form select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  font:
+    13px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+
+.form select {
+  font-family: inherit;
+}
+
+.form .row {
+  display: flex;
+  gap: 8px;
+}
+
+.form .row select {
+  width: auto;
+  flex: 0 0 auto;
+}
