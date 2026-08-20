@@ -13,6 +13,35 @@
       <!-- Built early rather than last. Managed storage is read once per
            extension start, so the honest answer to "is my edit live" is a
            revision and an age on screen — not a claim of liveness. -->
+      <!-- Above everything, because it outranks everything: without this grant
+           webRequest.onBeforeRequest cannot be registered, so no navigation is
+           ever seen and no rule can ever fire. A policy loaded on top of that
+           still decides nothing, and the log stays empty in a way that reads as
+           a quiet day rather than as a dead extension. -->
+      <section id="grant" hidden>
+        <h2>Turn on watching</h2>
+        <p class="lead">
+          container commander cannot see navigation yet, so it will never decide anything &mdash;
+          policy or no policy.
+        </p>
+        <div class="choices">
+          <button id="grant-button" type="button">Allow it to watch navigation</button>
+        </div>
+        <p class="note" id="grant-note">
+          Firefox will ask to <b>access your data for all websites</b>. That is how an add-on is
+          allowed to hold a request long enough to decide which container it belongs in &mdash; a
+          tab cannot be moved once it has loaded. It reads no page content and sends nothing
+          anywhere:
+          <a
+            href="https://github.com/sapn95/container-commander/blob/main/PRIVACY.md"
+            id="privacy"
+            target="_blank"
+            rel="noreferrer"
+            >what it looks at, in full</a
+          >. Switching it off again revokes this.
+        </p>
+      </section>
+
       <!-- The first screen a stranger sees, and for a while the only one: the
            add-on ships no rules, so a fresh install genuinely does nothing. That
            is correct behaviour and it looks exactly like a broken install, which

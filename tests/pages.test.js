@@ -16,6 +16,17 @@ const CONTAINERS = [
   { name: 'personal', cookieStoreId: 'firefox-container-1', colorCode: '#00ff00' },
 ];
 
+// Two popup states both describes below need: nothing installed, and a policy
+// that is loaded and deciding.
+const NO_POLICY = { inert: true, errors: [], paused: false, log: [] };
+const LOADED = {
+  inert: false,
+  errors: [],
+  paused: false,
+  log: [],
+  config: { revision: 'r1', dryRun: true, rules: [] },
+};
+
 async function mountPicker(query) {
   document.documentElement.innerHTML = html('src/pick/pick.html');
   globalThis.location = new URL(`moz-extension://cc/pick/pick.html${query}`);
@@ -245,8 +256,6 @@ describe('the setup screen a new install lands on', () => {
     await settle();
   }
 
-  const NO_POLICY = { inert: true, errors: [], paused: false, log: [] };
-
   it('comes out when there is no policy, and stays away when there is', async () => {
     await mountPopup(NO_POLICY);
     expect($('setup').hidden).toBe(false);
@@ -336,5 +345,106 @@ describe('the setup screen a new install lands on', () => {
     await mountPopup(NO_POLICY);
     expect(document.querySelector('.steps').textContent).toMatch(/Reload policy/);
     expect($('reload')).not.toBeNull();
+  });
+});
+
+describe('the permission without which nothing can ever be decided', () => {
+  // The one that actually bit. webRequest/webRequestBlocking/<all_urls> are
+  // OPTIONAL in the manifest, nothing in src/ ever asked for them, and
+  // armRequests() swallows the resulting failure — so the extension registered
+  // no listener, saw no navigation, decided nothing, and reported "Nothing
+  // decided yet this session", which is what a quiet day looks like too.
+  // PRIVACY.md had been promising the request was made "from the add-on's own
+  // page" for three releases.
+
+  async function mount({ granted, status = LOADED, request = async () => true } = {}) {
+    document.documentElement.innerHTML = html('src/popup/popup.html');
+    // jsdom has no navigation, and the granted path reloads the page. Left
+    // alone it throws into an unhandled rejection that the suite prints and
+    // nobody reads — which is the shape of thing that later hides a real one.
+    globalThis.location = { reload: vi.fn(), href: 'moz-extension://cc/popup/popup.html' };
+    globalThis.chrome = {
+      runtime: {
+        id: 'container-commander@sapn95.github.io',
+        getManifest: () => ({ version: '9.9.9' }),
+        reload: vi.fn(),
+        sendMessage: vi.fn(async (m) => (m?.type === 'cc:pause' ? { paused: m.paused } : status)),
+      },
+      permissions: { contains: async () => granted, request: vi.fn(request) },
+    };
+    vi.resetModules();
+    await import('../src/popup/popup.js');
+    await settle();
+  }
+
+  it('is asked for on the page, which is where PRIVACY.md says it is asked for', async () => {
+    await mount({ granted: false });
+    expect($('grant').hidden).toBe(false);
+    expect($('grant-button')).not.toBeNull();
+  });
+
+  it('stays out of the way once it has been granted', async () => {
+    await mount({ granted: true });
+    expect($('grant').hidden).toBe(true);
+  });
+
+  it('asks for everything in ONE call, because a second one always fails', async () => {
+    // permissions.request must run inside a user gesture, and a handler stops
+    // being user-initiated the moment it awaits. Splitting this into two calls
+    // is a bug that only shows up in a real browser.
+    await mount({ granted: false });
+    $('grant-button').click();
+    await settle();
+
+    expect(chrome.permissions.request).toHaveBeenCalledTimes(1);
+    const [asked] = chrome.permissions.request.mock.calls[0];
+    expect(asked.origins).toEqual(['<all_urls>']);
+    expect(asked.permissions).toEqual(['webRequest', 'webRequestBlocking']);
+    // and the page in front of you is stale the moment it is granted
+    expect(globalThis.location.reload).toHaveBeenCalled();
+  });
+
+  it('says what happened when the grant is refused, rather than going quiet', async () => {
+    await mount({ granted: false, request: async () => false });
+    $('grant-button').click();
+    await settle();
+
+    expect($('grant-note').textContent).toMatch(/refused|dismissed/i);
+    expect($('grant-button').disabled).toBe(false);
+    expect($('grant-note').textContent).toMatch(/about:addons/);
+  });
+
+  it('rewrites the empty log, which otherwise reads as a quiet day', async () => {
+    // This is the sentence that cost an afternoon: a loaded policy, an empty
+    // list, and no hint that the list can never fill.
+    await mount({ granted: false });
+    expect($('log-empty').textContent).toMatch(/until watching is turned on/i);
+
+    await mount({ granted: true });
+    expect($('log-empty').textContent).toMatch(/nothing decided yet/i);
+  });
+
+  it('does not claim a grant when the browser cannot answer', async () => {
+    // A wrong "yes" hides exactly the state this is here to report.
+    document.documentElement.innerHTML = html('src/popup/popup.html');
+    globalThis.chrome = {
+      runtime: {
+        id: 'x@y',
+        getManifest: () => ({ version: '9.9.9' }),
+        reload: vi.fn(),
+        sendMessage: vi.fn(async () => LOADED),
+      },
+      permissions: {
+        contains: async () => {
+          throw new Error('no such API');
+        },
+        request: vi.fn(),
+      },
+    };
+    vi.resetModules();
+    await import('../src/popup/popup.js');
+    await settle();
+
+    expect($('grant').hidden).toBe(false);
   });
 });
