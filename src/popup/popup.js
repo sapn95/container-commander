@@ -24,6 +24,7 @@ if (!status) {
   $('revision').textContent = status.config.revision;
   const dry = status.config.dryRun ? ' · dry run: deciding but not enforcing' : '';
   $('state').textContent = `${status.config.rules.length} rule(s)${dry}`;
+  showRules(status.config);
 }
 
 $('pause').textContent = status?.paused ? 'Resume' : 'Pause for this session';
@@ -135,7 +136,14 @@ function showSetup() {
   $('sample').textContent = samplePolicy();
   $('setup').hidden = false;
 
+  wireCopyButtons();
+}
+
+/** Shared by the setup screen and the rule list. */
+function wireCopyButtons() {
   for (const button of document.querySelectorAll('.copy')) {
+    if (button.dataset.wired) continue;
+    button.dataset.wired = '1';
     button.addEventListener('click', async () => {
       const text = $(button.dataset.copy).textContent;
       // The clipboard can be refused, and a button that silently did nothing
@@ -151,4 +159,68 @@ function showSetup() {
       }, 1600);
     });
   }
+}
+
+/** What a rule matches on, as the shortest true description of it. */
+function matchOf(rule) {
+  const m = rule.match ?? {};
+  if (m.host) return { kind: 'host', text: m.host + (m.path ? m.path : '') };
+  if (m.regex) return { kind: 'regex', text: m.regex };
+  return { kind: '?', text: '(nothing)' };
+}
+
+function showRules(config) {
+  const list = $('rulelist');
+  list.replaceChildren();
+
+  for (const rule of config.rules ?? []) {
+    const { kind, text } = matchOf(rule);
+    const li = document.createElement('li');
+
+    const match = document.createElement('span');
+    match.className = 'match';
+    // textContent throughout: a rule is a string from a file, and this page has
+    // no business interpreting any of it as markup.
+    match.textContent = text;
+    match.title = `${kind}: ${text}`;
+
+    const arrow = document.createElement('span');
+    arrow.className = rule.to === 'ask' ? 'to ask' : 'to';
+    arrow.textContent = rule.to === 'ask' ? ' → ask' : ` → ${rule.to}`;
+
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    meta.textContent = `  ${rule.scope} · ${rule.id}`;
+
+    li.append(match, arrow, meta);
+    list.append(li);
+  }
+
+  // never and authHosts are rules in every sense that matters — they decide
+  // outcomes — and leaving them off the page would make the list above look
+  // like the whole policy when it is not.
+  const lists = $('lists');
+  lists.replaceChildren();
+  const dl = document.createElement('dl');
+  dl.className = 'hostlist';
+  const section = (label, hosts, why) => {
+    if (!hosts?.length) return;
+    const dt = document.createElement('dt');
+    dt.textContent = `${label} — ${why}`;
+    const dd = document.createElement('dd');
+    dd.textContent = hosts.join(', ');
+    dl.append(dt, dd);
+  };
+  section('Never', config.never, 'no rule may act on these');
+  section('Auth hosts', config.authHosts, 'shared by every identity, so never pinned by hostname');
+  section(
+    'Bookmark folders',
+    (config.bookmarks?.folders ?? []).map((f) => `${f.path} → ${f.to}`),
+    'the weakest signal, and only for entries begun in the browser',
+  );
+  if (dl.children.length) lists.append(dl);
+
+  $('rules-path').textContent = managedPath().path;
+  $('rules-section').hidden = false;
+  wireCopyButtons();
 }

@@ -216,3 +216,61 @@ code {
     Menlo,
     monospace;
 }
+
+/* --- The rule list --------------------------------------------------------
+   Numbered because the number IS information: compile() sorts by specificity,
+   so this is the evaluation order and it is not the order in the source file. */
+
+.rulelist {
+  margin: 0 0 14px;
+  padding-left: 26px;
+  font-size: 13px;
+}
+
+.rulelist li {
+  margin-bottom: 7px;
+  line-height: 1.45;
+}
+
+.rulelist .match {
+  font:
+    12px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  word-break: break-all;
+}
+
+.rulelist .to {
+  font-weight: 600;
+}
+
+.rulelist .ask {
+  color: var(--accent);
+}
+
+.rulelist .meta {
+  color: var(--muted);
+}
+
+.hostlist {
+  margin: 0 0 12px;
+}
+
+.hostlist dt {
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.hostlist dd {
+  margin: 0 0 10px;
+  font:
+    12px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  word-break: break-all;
+}
