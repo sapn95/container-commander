@@ -6,6 +6,7 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { validateConfig } from '../src/lib/config.js';
 import { join } from 'node:path';
 
 const html = (p) => readFileSync(join(process.cwd(), p), 'utf8').replace(/<!doctype html>/i, '');
@@ -221,5 +222,119 @@ describe('the popup', () => {
     expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'cc:pause', paused: true }),
     );
+  });
+});
+
+describe('the setup screen a new install lands on', () => {
+  // The whole reason this exists: "no policy installed" is a diagnosis, and a
+  // person who has just installed this from the store needs the next step. The
+  // author hit that dead end himself, on the day it went public.
+
+  async function mountPopup(status) {
+    document.documentElement.innerHTML = html('src/popup/popup.html');
+    globalThis.chrome = {
+      runtime: {
+        id: 'container-commander@sapn95.github.io',
+        getManifest: () => ({ version: '9.9.9' }),
+        reload: vi.fn(),
+        sendMessage: vi.fn(async (m) => (m?.type === 'cc:pause' ? { paused: m.paused } : status)),
+      },
+    };
+    vi.resetModules();
+    await import('../src/popup/popup.js');
+    await settle();
+  }
+
+  const NO_POLICY = { inert: true, errors: [], paused: false, log: [] };
+
+  it('comes out when there is no policy, and stays away when there is', async () => {
+    await mountPopup(NO_POLICY);
+    expect($('setup').hidden).toBe(false);
+
+    await mountPopup({
+      inert: false,
+      errors: [],
+      paused: false,
+      log: [],
+      config: { revision: 'r1', dryRun: false, rules: [] },
+    });
+    expect($('setup').hidden).toBe(true);
+  });
+
+  it('names the file after the extension id, which is what makes Firefox deliver it', async () => {
+    await mountPopup(NO_POLICY);
+    const path = $('managed-path').textContent;
+    expect(path).toContain('container-commander@sapn95.github.io');
+    expect(path.length).toBeGreaterThan(20);
+  });
+
+  it('offers a sample policy the extension would actually accept', async () => {
+    // A sample that gets rejected is worse than no sample: it sends a new user
+    // to debug the one thing they were told to trust.
+    await mountPopup(NO_POLICY);
+    const sample = JSON.parse($('sample').textContent);
+
+    expect(sample.name).toBe('container-commander@sapn95.github.io');
+    expect(sample.type).toBe('storage');
+    expect(validateConfig(sample.data.policy).errors).toEqual([]);
+  });
+
+  it('starts in dry run, so a first policy cannot move a tab by surprise', async () => {
+    await mountPopup(NO_POLICY);
+    expect(JSON.parse($('sample').textContent).data.policy.dryRun).toBe(true);
+  });
+
+  it('gives each platform its own path, because that is the one thing you cannot guess', async () => {
+    // A Linux reader handed a ~/Library path is exactly the dead end this
+    // screen exists to close, one step further along.
+    const ua = (value) =>
+      Object.defineProperty(globalThis.navigator, 'userAgent', {
+        value,
+        configurable: true,
+      });
+
+    ua('Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/153.0');
+    await mountPopup(NO_POLICY);
+    expect($('managed-path').textContent).toContain('.mozilla/managed-storage');
+
+    ua('Mozilla/5.0 (Windows NT 10.0; Win64; x64) Gecko/20100101 Firefox/153.0');
+    await mountPopup(NO_POLICY);
+    expect($('managed-path').textContent).toContain('HKEY_CURRENT_USER');
+    // Windows keeps a POINTER to the file, not the file, and a reader told to
+    // "create this" without that sentence writes JSON into a registry key.
+    expect($('managed-note').textContent).toMatch(/registry/i);
+
+    ua('Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15) Gecko/20100101 Firefox/153.0');
+  });
+
+  it('says so when the clipboard refuses, rather than looking dead', async () => {
+    // A copy button that silently does nothing is this screen repeating the
+    // mistake it was built to fix.
+    await mountPopup(NO_POLICY);
+    const button = document.querySelector('.copy');
+
+    globalThis.navigator.clipboard = { writeText: async () => {} };
+    button.click();
+    await settle();
+    expect(button.textContent).toBe('Copied');
+
+    await new Promise((r) => setTimeout(r, 1700));
+    globalThis.navigator.clipboard = {
+      writeText: async () => {
+        throw new Error('denied');
+      },
+    };
+    button.click();
+    await settle();
+    expect(button.textContent).toMatch(/select it/i);
+  });
+
+  it('sends the reader to Reload rather than to a browser restart', async () => {
+    // runtime.reload() restarts the add-on, and the add-on starting is exactly
+    // when managed storage is read. Telling a stranger to restart Firefox when
+    // a button on the same page does it costs them a minute for nothing.
+    await mountPopup(NO_POLICY);
+    expect(document.querySelector('.steps').textContent).toMatch(/Reload policy/);
+    expect($('reload')).not.toBeNull();
   });
 });

@@ -11,11 +11,13 @@ if (!status) {
   $('revision').textContent = 'the background page did not answer';
 } else if (status.inert) {
   // A missing managed manifest makes storage.managed.get() reject, and that is
-  // a fresh install rather than a failure. It is said plainly, because an
-  // extension that is silently doing nothing looks exactly like one that is
-  // silently doing the wrong thing.
+  // a fresh install rather than a failure. Saying so plainly was the old
+  // behaviour and it was not enough: "no policy installed" is a diagnosis, and
+  // a person who has just installed this from the store needs the next step.
+  // So the whole setup screen comes out instead.
   $('revision').textContent = 'no policy installed — nothing is being routed';
   $('state').textContent = status.errors?.join('; ') ?? '';
+  showSetup();
 } else {
   $('revision').textContent = status.config.revision;
   const dry = status.config.dryRun ? ' · dry run: deciding but not enforcing' : '';
@@ -46,4 +48,79 @@ for (const e of entries) {
   verdict.title = e.decision.reason ?? '';
   li.append(host, verdict);
   $('log').append(li);
+}
+
+/**
+ * The path Firefox reads the policy from, which is per-platform and is the one
+ * thing a reader cannot guess.
+ *
+ * Derived from the user agent because an extension has no OS API. Wrong is
+ * survivable here — the file is named on screen either way and the linked doc
+ * lists all three — where a missing path is not.
+ */
+function managedPath() {
+  const id = chrome.runtime.id;
+  const ua = navigator.userAgent;
+  if (ua.includes('Macintosh')) {
+    return {
+      path: `~/Library/Application Support/Mozilla/ManagedStorage/${id}.json`,
+      note: 'macOS. Create the ManagedStorage folder if it is not there yet.',
+    };
+  }
+  if (ua.includes('Windows')) {
+    return {
+      path: `HKEY_CURRENT_USER\\Software\\Mozilla\\ManagedStorage\\${id}`,
+      note: 'Windows keeps this in the registry: a key of that name whose default value is the full path to your .json file.',
+    };
+  }
+  return {
+    path: `~/.mozilla/managed-storage/${id}.json`,
+    note: 'Linux. Create the managed-storage folder if it is not there yet.',
+  };
+}
+
+/** A policy that is valid, does one obvious thing, and enforces nothing. */
+function samplePolicy() {
+  return JSON.stringify(
+    {
+      name: chrome.runtime.id,
+      description: 'container commander policy',
+      type: 'storage',
+      data: {
+        policy: {
+          schema: 1,
+          revision: 'hand-written-1',
+          dryRun: true,
+          rules: [{ id: 'example', scope: 'any', match: { host: 'example.com' }, to: 'Work' }],
+        },
+      },
+    },
+    null,
+    2,
+  );
+}
+
+function showSetup() {
+  const { path, note } = managedPath();
+  $('managed-path').textContent = path;
+  $('managed-note').textContent = note;
+  $('sample').textContent = samplePolicy();
+  $('setup').hidden = false;
+
+  for (const button of document.querySelectorAll('.copy')) {
+    button.addEventListener('click', async () => {
+      const text = $(button.dataset.copy).textContent;
+      // The clipboard can be refused, and a button that silently did nothing
+      // would be this screen making the same mistake twice.
+      const ok = await navigator.clipboard.writeText(text).then(
+        () => true,
+        () => false,
+      );
+      const was = button.textContent;
+      button.textContent = ok ? 'Copied' : 'Select it and copy';
+      setTimeout(() => {
+        button.textContent = was;
+      }, 1600);
+    });
+  }
 }

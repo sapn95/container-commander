@@ -10,6 +10,7 @@ const BROWSER = {
   document: 'readonly',
   KeyboardEvent: 'readonly',
   location: 'readonly',
+  navigator: 'readonly',
   URL: 'readonly',
   URLSearchParams: 'readonly',
   console: 'readonly',

@@ -17,12 +17,15 @@ launcher and the link handler in that count are mine too —
 outside the browser — and both announce a tab to commander _before_ they create
 it instead of racing it, which is the whole reason this repository exists.
 
-> **Status: in review at addons.mozilla.org.**
-> [v0.2.0](https://github.com/sapn95/container-commander/releases/tag/v0.2.0) is
-> tagged and submitted. The architecture below survived a three-way design panel,
-> two judges and four adversarial passes that found twenty-one breaks — every one
+> **[Install it from addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/container-commander/)**
+> — then read [docs/configuration.md](docs/configuration.md), because it ships no
+> rules and does nothing at all until you give it a policy. That is the design,
+> and the add-on's own page walks you through it.
+>
+> v0.2.1 is public. The architecture below survived a three-way design panel, two
+> judges and four adversarial passes that found twenty-one breaks — every one
 > repaired here. The tests were written first and the code was written to satisfy
-> them: **273 specs, 94% statements**, 97% on the engine that makes every
+> them: **274 specs, 94% statements**, 97% on the engine that makes every
 > decision, with four of the catalogued failures carried as executable
 > regressions and the other two designed out rather than tested for.
 
@@ -116,6 +119,7 @@ per decision is in [docs/adr/](docs/adr/).
 | `src/background.js`       | the event page — arming, input assembly, and carrying out a `Decision`                     |
 | `tests/`                  | the specification, executable; the code was written to satisfy it                          |
 | `scripts/`                | the build, the artwork generators, and the allowlist that keeps this repo employer-neutral |
+| `docs/configuration.md`   | **start here after installing**: where the policy file goes, and what goes in it           |
 | `docs/architecture.md`    | the full design, post-adversarial                                                          |
 | `docs/failure-catalog.md` | six failures observed in production, plus the platform terrain behind them                 |
 | `docs/adr/`               | one file per decision a reviewer would question                                            |

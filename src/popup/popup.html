@@ -13,6 +13,58 @@
       <!-- Built early rather than last. Managed storage is read once per
            extension start, so the honest answer to "is my edit live" is a
            revision and an age on screen — not a claim of liveness. -->
+      <!-- The first screen a stranger sees, and for a while the only one: the
+           add-on ships no rules, so a fresh install genuinely does nothing. That
+           is correct behaviour and it looks exactly like a broken install, which
+           is why this section exists at all. It carries the next step rather
+           than the diagnosis. -->
+      <section id="setup" hidden>
+        <h2>Set it up</h2>
+        <p class="lead">
+          Nothing is being routed, and that is the expected state. This add-on ships no rules on
+          purpose &mdash; it stays out of the way until you give it a policy.
+        </p>
+
+        <ol class="steps">
+          <li>
+            <p>Create this file:</p>
+            <p class="url" id="managed-path"></p>
+            <button class="copy" type="button" data-copy="managed-path">Copy path</button>
+            <p class="note" id="managed-note"></p>
+          </li>
+          <li>
+            <p>
+              Put this in it, and change the last two lines to a site and one of your container
+              names:
+            </p>
+            <pre class="sample" id="sample"></pre>
+            <button class="copy" type="button" data-copy="sample">Copy policy</button>
+            <p class="note">
+              <code>dryRun</code> is on, so it decides everything and moves nothing. Watch
+              <b>Recent decisions</b> below until you believe it, then set it to <code>false</code>.
+            </p>
+          </li>
+          <li>
+            <p>
+              Press <b>Reload policy</b>, just below. This file is read once when the add-on starts,
+              so nothing you write is live until it starts again &mdash; and that button is the
+              cheap way to make it. Restarting Firefox does the same thing the slow way.
+            </p>
+          </li>
+        </ol>
+
+        <p class="note">
+          The full format, and how to have a config repository generate this file instead of writing
+          it by hand:
+          <a
+            href="https://github.com/sapn95/container-commander/blob/main/docs/configuration.md"
+            target="_blank"
+            rel="noreferrer"
+            >docs/configuration.md</a
+          >.
+        </p>
+      </section>
+
       <section>
         <h2>Policy</h2>
         <p class="url" id="revision">reading…</p>
