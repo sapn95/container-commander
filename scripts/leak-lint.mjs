@@ -27,6 +27,7 @@ const HOSTS_OK = [
   /^([a-z0-9-]+\.)*localhost$/,
   /^127\.0\.0\.1(:\d+)?$/,
   // Named vendor hosts the documentation is allowed to discuss generically.
+  /^docs\.renovatebot\.com$/,
   /^(addons|developer|bugzilla)\.mozilla\.org$/,
   /^(www\.)?github\.com$/,
   /^developer\.chrome\.com$/,
