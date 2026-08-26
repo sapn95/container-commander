@@ -427,10 +427,130 @@ describe('the bookmark index', () => {
 });
 
 describe('the toolbar button', () => {
-  it('opens the settings in a tab', async () => {
+  // It used to open the options page, which about:addons already reaches. The
+  // one gesture that had nowhere to stand was the human override: documented,
+  // shipped, and buried under a right-click on a tab strip. The button is now
+  // the panel that performs it, and these tests are about the message it sends
+  // — the panel's own DOM is pages.test.js.
+
+  // sendResponse arrives on a later turn — the handler returns true and answers
+  // once the move has been carried out — so the reply is a promise here rather
+  // than a return value. Capturing it synchronously reads `undefined` for every
+  // outcome, which is a test that cannot tell "refused" from "did it".
+  const sendTo = (c, msg) => {
+    let settle;
+    const replied = new Promise((r) => {
+      settle = r;
+    });
+    c.runtime.onMessage.emitSync(msg, {}, settle);
+    return replied;
+  };
+
+  it('moves the tab the panel names, through the same path as the menu', async () => {
     const c = await boot();
-    await c.action.onClicked.emit({});
-    expect(c.runtime.openOptionsPage).toHaveBeenCalled();
+    const moved = sendTo(c, {
+      type: 'cc:override',
+      tabId: 7,
+      url: 'https://example.com/doc',
+      from: 'firefox-default',
+      to: 'firefox-container-2',
+    });
+    await settle(20);
+    expect(c.tabs.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: 'https://example.com/doc',
+        cookieStoreId: 'firefox-container-2',
+      }),
+    );
+    expect(c.tabs.remove).toHaveBeenCalledWith(7);
+    await expect(moved).resolves.toEqual({ moved: true });
+  });
+
+  it('announces the claim before the tab exists, exactly as the menu does', async () => {
+    // The reason this goes through the background at all. A panel that called
+    // tabs.create itself would skip the handshake, and linkward would offer a
+    // picker for the answer somebody had just given by hand.
+    const c = await boot();
+    sendTo(c, {
+      type: 'cc:override',
+      tabId: 7,
+      url: 'https://example.com/doc',
+      from: '',
+      to: 'firefox-container-2',
+    });
+    await settle(20);
+    const order = c.runtime.sendMessage.mock.calls.map(([, msg]) => msg.type);
+    expect(order.indexOf('cc:claim')).toBeLessThan(order.indexOf('cc:opened'));
+  });
+
+  it('does nothing when the tab is already there', async () => {
+    // The panel does not offer the current container, so this only arrives from
+    // a stale popup — one left open while the tab moved underneath it. Silently
+    // costing that tab its history and its scroll position to put it back where
+    // it already is would be the worst possible answer.
+    const c = await boot();
+    const answer = sendTo(c, {
+      type: 'cc:override',
+      tabId: 7,
+      url: 'https://example.com/doc',
+      from: 'firefox-container-2',
+      to: 'firefox-container-2',
+    });
+    await settle(20);
+    expect(c.tabs.create).not.toHaveBeenCalled();
+    await expect(answer).resolves.toEqual({ moved: false });
+  });
+
+  it('puts the replacement where the original stood', async () => {
+    // A14, which docs/architecture.md has promised since 0.1.0 and which nothing
+    // implemented: `active: true` was hardcoded, so a middle-clicked background
+    // tab came back in front of whatever you were reading, at the end of the
+    // strip. Documented, never wired, silent — the same shape as the three
+    // failures in the catalogue, found while adding the toolbar button.
+    const c = await boot();
+    c.tabs.get = vi.fn(async () => ({
+      id: 7,
+      active: false,
+      windowId: 3,
+      index: 4,
+      cookieStoreId: 'firefox-default',
+    }));
+    sendTo(c, {
+      type: 'cc:override',
+      tabId: 7,
+      url: 'https://example.com/doc',
+      from: '',
+      to: 'firefox-container-2',
+    });
+    await settle(20);
+    expect(c.tabs.create).toHaveBeenCalledWith(
+      expect.objectContaining({ active: false, windowId: 3, index: 5 }),
+    );
+  });
+
+  it('treats firefox-default and no container as the same place', async () => {
+    // Two spellings of one thing: a tab outside every container reports
+    // `firefox-default`, and tabs.create wants the key absent. The menu offers
+    // "No container" on every page, so before this the item was live on tabs
+    // that were already in none — one click, one lost history, no change.
+    const c = await boot();
+    const answer = sendTo(c, {
+      type: 'cc:override',
+      tabId: 7,
+      url: 'https://example.com/doc',
+      from: 'firefox-default',
+      to: '',
+    });
+    await settle(20);
+    expect(c.tabs.create).not.toHaveBeenCalled();
+    await expect(answer).resolves.toEqual({ moved: false });
+  });
+
+  it('refuses a scheme it cannot reopen', async () => {
+    const c = await boot();
+    sendTo(c, { type: 'cc:override', tabId: 7, url: 'about:config', from: '', to: 'x' });
+    await settle(20);
+    expect(c.tabs.create).not.toHaveBeenCalled();
   });
 });
 

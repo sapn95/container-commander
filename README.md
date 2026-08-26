@@ -87,9 +87,9 @@ RUNG 4  Entry rules  First match over a compiler-ordered list. External rules fo
 RUNG 5  Ask          Only when a rule says so. Never a fallback.
 RUNG 6  Leave alone  A named rung, not an else-branch. Every unknown lands here.
         ─────────────
-OUT     Human override — "Reopen this tab in <container>", on the tab's own
-        context menu. The only path by which a tab that already exists can be
-        moved, and it reads no rule to do it.
+OUT     Human override — the toolbar button, and "Reopen this tab in
+        <container>" on the tab's own context menu. The only path by which a
+        tab that already exists can be moved, and it reads no rule to do it.
 ```
 
 Read it in full in [docs/architecture.md](docs/architecture.md); the reasoning

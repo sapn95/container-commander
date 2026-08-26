@@ -130,13 +130,39 @@ async function buildMenu() {
 function onMenuClicked(info, tab) {
   const id = String(info?.menuItemId ?? '');
   if (!id.startsWith(MENU_ITEM)) return;
-  const cookieStoreId = id.slice(MENU_ITEM.length);
+  return humanOverride({
+    tabId: tab?.id,
+    url: tab?.url ?? '',
+    from: tab?.cookieStoreId ?? '',
+    to: id.slice(MENU_ITEM.length),
+  });
+}
 
-  const url = tab?.url ?? '';
-  if (!/^https?:\/\//.test(url) || typeof tab?.id !== 'number') return;
+/** The two spellings of "no container" — `firefox-default` and absent — as one. */
+const plain = (cookieStoreId) =>
+  (cookieStoreId ?? '') === 'firefox-default' ? '' : (cookieStoreId ?? '');
+
+/**
+ * The one move this extension makes that is not a decision.
+ *
+ * Two things ask for it — the tab-strip menu and the toolbar button — and they
+ * share this function rather than each doing the four steps, because the steps
+ * are not obviously all of them. The peer handshake in openThere() is the one
+ * that bites: skip it and linkward sees a fresh, opener-less http tab and
+ * offers a picker for the answer somebody just gave by hand.
+ *
+ * @param {{tabId: number, url: string, from: string, to: string}} what
+ */
+function humanOverride({ tabId, url, from, to }) {
+  if (!/^https?:\/\//.test(url) || typeof tabId !== 'number') return Promise.resolve(false);
   // Already there. Reopening would cost the tab its history and its scroll
   // position to arrive exactly where it started.
-  if ((tab.cookieStoreId ?? '') === cookieStoreId) return;
+  //
+  // Compared through plain() because a tab outside every container reports
+  // `firefox-default` while tabs.create wants the key absent — so the menu's
+  // "No container" and a tab that already has none are the same place spelled
+  // two ways, and the raw comparison missed it.
+  if (plain(from) === plain(to)) return Promise.resolve(false);
 
   // Logged like any other outcome, and named. The popup's list is the product,
   // and an override that happened invisibly would be the one decision it could
@@ -145,13 +171,18 @@ function onMenuClicked(info, tab) {
   log.unshift({
     at: Date.now(),
     url,
-    decision: { action: 'reopen', rung: RUNG.OVERRIDE, reason: 'human-override', cookieStoreId },
+    decision: {
+      action: 'reopen',
+      rung: RUNG.OVERRIDE,
+      reason: 'human-override',
+      cookieStoreId: to,
+    },
   });
   log.length = Math.min(log.length, LOG_MAX);
 
   // A reopen is a close and a re-fetch, so this cannot preserve a POST — which
   // is why the ladder never does it unasked. Here it was asked for.
-  return openThere(tab.id, url, cookieStoreId);
+  return openThere(tabId, url, to).then(() => true);
 }
 
 function armMenu() {
@@ -227,10 +258,6 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
   }
 });
 
-chrome.action?.onClicked?.addListener(() => {
-  chrome.runtime.openOptionsPage().catch(() => {});
-});
-
 // --- Assembling one plain object -------------------------------------------
 
 async function situationFor(details) {
@@ -281,6 +308,21 @@ async function listContainers() {
 }
 
 async function openThere(tabId, url, cookieStoreId) {
+  // A14: the replacement stands where the original stood.
+  //
+  // This was written down in docs/architecture.md for four releases and never
+  // implemented — `active: true` was hardcoded, so a middle-clicked background
+  // tab was reopened in front of whatever you were reading, at the end of the
+  // strip. Same shape as the three failures in the catalogue: promised in
+  // prose, absent from the code, and silent about it.
+  //
+  // index, windowId and active are not gated properties, so reading them back
+  // needs no permission this extension does not already hold.
+  const from = typeof tabId === 'number' ? await chrome.tabs.get(tabId).catch(() => null) : null;
+  const place = from
+    ? { active: from.active !== false, windowId: from.windowId, index: from.index + 1 }
+    : { active: true };
+
   // Announced BEFORE the tab exists, and awaited: linkward would otherwise see
   // a fresh, opener-less http tab and offer a picker for a tab this extension
   // had just deliberately placed.
@@ -291,7 +333,7 @@ async function openThere(tabId, url, cookieStoreId) {
     // and the schema validator wants the key absent rather than falsy.
     created = await chrome.tabs.create({
       url,
-      active: true,
+      ...place,
       ...(cookieStoreId ? { cookieStoreId } : {}),
     });
   } catch {
@@ -401,6 +443,18 @@ function badge() {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type !== 'cc:status') return undefined;
   sendResponse({ ...loaded, paused, log: log.slice(0, 20) });
+  return true;
+});
+
+// The toolbar panel's one action. It could call tabs.create itself — the picker
+// does — but then the peer handshake and the OVERRIDE log line would exist in
+// two places, and the second copy is the one that goes stale.
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type !== 'cc:override') return undefined;
+  humanOverride(msg).then(
+    (moved) => sendResponse({ moved }),
+    () => sendResponse({ moved: false }),
+  );
   return true;
 });
 
