@@ -59,9 +59,26 @@ describe('the manifest', () => {
     );
   });
 
-  it('opens its settings in a tab, because a popup is too narrow for a log', () => {
-    expect(manifest.action.default_popup).toBeUndefined();
+  it('puts the panel on the button and keeps the settings in a tab', () => {
+    // A popup is too narrow for a rule list and a decision log, and that has not
+    // changed. What changed is what the button is FOR: opening the options page
+    // duplicated about:addons, while the human override — the one gesture that
+    // has to be reachable when a rule is wrong — was buried under a right-click
+    // on a tab strip. The panel is small enough for a popup because it asks one
+    // question.
+    expect(manifest.action.default_popup).toBe('switch/switch.html');
     expect(manifest.options_ui.open_in_tab).toBe(true);
+  });
+
+  it('asks for activeTab rather than reading the address off <all_urls>', () => {
+    // The panel needs the address of the tab you are looking at, and nothing
+    // else. activeTab is granted by the click that opens the panel, carries no
+    // warning in Firefox — so an update does not stall waiting for consent —
+    // and, most of the point, it means the override still works on a profile
+    // that never granted the watching permission.
+    expect(manifest.permissions).toContain('activeTab');
+    expect(manifest.permissions).not.toContain('tabs');
+    expect(manifest.optional_permissions).toContain('<all_urls>');
   });
 
   it('declares the background as an event page, which is what Firefox runs', () => {

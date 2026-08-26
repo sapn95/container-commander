@@ -10,6 +10,9 @@ const BROWSER = {
   document: 'readonly',
   KeyboardEvent: 'readonly',
   location: 'readonly',
+  // Only a popup ever calls this: window.close() dismisses the toolbar panel
+  // once the tab it described has been replaced.
+  window: 'readonly',
   navigator: 'readonly',
   URL: 'readonly',
   URLSearchParams: 'readonly',

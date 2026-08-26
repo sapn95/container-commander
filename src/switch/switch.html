@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../pick/pick.css" />
+    <link rel="stylesheet" href="switch.css" />
+    <title>Move this tab</title>
+  </head>
+  <body class="panel">
+    <main>
+      <!-- A strip, not a state. Moving a tab by hand works with no grant at
+           all, so the missing grant must not stand in front of the one thing
+           this panel is for. It says what is switched off and offers to switch
+           it on, and the panel underneath stays usable either way. -->
+      <section id="warn" hidden>
+        <p class="lead">Routing is off. Nothing is decided automatically.</p>
+        <div class="choices">
+          <button id="grant-button" type="button">Allow it to watch navigation</button>
+        </div>
+      </section>
+
+      <!-- about:, moz-extension:, view-source: and the rest. A container is a
+           property a web page has and these do not, so there is nothing here to
+           move and saying so is better than an empty list. -->
+      <section id="nothing" hidden>
+        <p class="lead">This is not a web page, so it is not in a container.</p>
+      </section>
+
+      <section id="move" hidden>
+        <p class="here">
+          <span class="dot" id="here-dot"></span>
+          <span id="here-name"></span>
+        </p>
+        <!-- textContent, always. The host came off a page somebody visited. -->
+        <p class="url" id="host"></p>
+        <h1>Move this tab to</h1>
+        <div class="choices" id="choices"></div>
+        <p class="note">
+          Reopens the address in another container. The tab's history and its scroll position do not
+          survive that, which is why nothing does it for you.
+        </p>
+      </section>
+
+      <p class="foot">
+        <button id="settings" type="button" class="link">Rules and settings</button>
+      </p>
+    </main>
+    <script type="module" src="switch.js"></script>
+  </body>
+</html>

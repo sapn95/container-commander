@@ -216,7 +216,7 @@ to a blocking listener is holding up somebody's page.
 
 ## 9. Out of ladder — the human override
 
-A context command on the tab itself: **"Reopen this tab in ‹container›"**, registered through `browser.menus` — not `chrome.menus`, which does not exist; the chrome namespace only ever exposed `contextMenus`, and in Firefox the two names are separate permissions. The manifest asks for `menus`, so `menus` is the namespace that goes with it. It applies to an
+Two ways in, one code path. The **toolbar button** opens a panel that names the tab's container and offers the others; and a context command on the tab itself, **"Reopen this tab in ‹container›"**, registered through `browser.menus` — not `chrome.menus`, which does not exist; the chrome namespace only ever exposed `contextMenus`, and in Firefox the two names are separate permissions. The manifest asks for `menus`, so `menus` is the namespace that goes with it. It applies to an
 existing tab on an explicit gesture, self-claims, announces `cc:claim` to peers,
 and reopens. It is the _only_ path by which a rule may touch a flow that already
 exists, and it replaces the dialog from F2 with something that acts instead of
@@ -225,6 +225,22 @@ asking.
 **`A14`** It preserves `active`, `windowId` and `index + 1` from the tab it
 replaces, so a middle-clicked background tab is reopened as a background tab in
 the same position. Routing that steals focus is a different kind of wrong.
+
+> This paragraph was here from 0.1.0 and was not true until 0.5.0. `openThere()`
+> hardcoded `active: true` and passed neither `windowId` nor `index`, so every
+> reopen jumped to the front of the window and to the end of the strip. Nothing
+> failed and nothing said so.
+>
+> That is the third time this repository has documented a behaviour it never
+> implemented — after `chrome.menus`, which does not exist, and the optional
+> permissions nothing ever requested. All three were invisible for the same
+> reason: the failing path is a silent `catch` or an unread default, and prose
+> is not executable. Found the same way too, by reading the code against the
+> prose rather than the prose on its own.
+>
+> The rule applies wherever a tab is replaced, so the picker at rung 5 carries
+> it as well. A14 true in one of the two places it applies is how a claim in
+> this file quietly stops being a claim.
 
 ---
 

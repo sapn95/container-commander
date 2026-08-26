@@ -1,0 +1,88 @@
+/* The toolbar panel.
+ *
+ * Everything here narrows pick.css rather than restating it: this is the same
+ * list of containers the picker draws, in a box the browser sizes for us. Only
+ * the things a popup needs and a full page does not live in this file.
+ *
+ * A browser-action popup has no viewport of its own — Firefox measures the
+ * document and draws a window around it — so the width is stated here or it is
+ * guessed, and a guessed one reflows every time a container is renamed.
+ */
+
+body.panel {
+  width: 260px;
+  padding: 14px;
+}
+
+body.panel main {
+  max-width: none;
+}
+
+body.panel h1 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Where the tab is now. Stated rather than drawn as a selected button: this
+ * one is not a destination, and a disabled button in a list of live ones reads
+ * as something that failed to load. */
+.here {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+body.panel .url {
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+  font-size: 11px;
+}
+
+body.panel .note {
+  margin: 12px 0 0;
+  font-size: 11px;
+}
+
+#warn {
+  margin: 0 0 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+#warn .lead {
+  margin: 0 0 8px;
+}
+
+#warn button {
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.foot {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* A button, because it opens the options page through an API call rather than
+ * by navigating — and an <a href="#"> that is not a link is a lie told to
+ * anyone reading it with a keyboard or a screen reader. */
+.link {
+  padding: 0;
+  border: 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+.link:hover,
+.link:focus-visible {
+  color: var(--fg);
+}

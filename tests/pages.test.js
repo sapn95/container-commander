@@ -32,8 +32,17 @@ async function mountPicker(query) {
   globalThis.location = new URL(`moz-extension://cc/pick/pick.html${query}`);
   globalThis.chrome = {
     tabs: {
-      getCurrent: vi.fn(async () => ({ id: 5 })),
-      create: vi.fn(async () => ({ id: 9 })),
+      getCurrent: vi.fn(async () => ({ id: 5, active: true, windowId: 3, index: 4 })),
+      // As strict as the browser about the two fields that are easy to compute
+      // into nonsense: tabs.create rejects a non-integer index or windowId, and
+      // the catch around it would turn that into a picker that silently eats
+      // every choice made on it.
+      create: vi.fn(async (props = {}) => {
+        for (const k of ['index', 'windowId']) {
+          if (k in props && !Number.isInteger(props[k])) throw new Error(`bad ${k}`);
+        }
+        return { id: 9 };
+      }),
       remove: vi.fn(async () => {}),
     },
     runtime: { sendMessage: vi.fn(async () => ({ ok: true })) },
@@ -50,6 +59,7 @@ async function settle(times = 20) {
 
 const $ = (id) => document.getElementById(id);
 const buttons = () => [...document.querySelectorAll('#choices button')];
+const labels = () => buttons().map((b) => b.lastChild.textContent);
 
 afterEach(() => {
   delete globalThis.chrome;
@@ -57,6 +67,19 @@ afterEach(() => {
 });
 
 describe('the picker', () => {
+  it('puts the replacement where the tab it replaces stood', async () => {
+    // A14, and this page is the one the rule redirected — so its window and its
+    // position are the ones worth keeping. Same fix as the override path, made
+    // at the same time, because A14 being true in one of the two places it
+    // applies is how a claim in the docs quietly stops being a claim.
+    await mountPicker('?url=https://example.com/');
+    buttons()[0].click();
+    await settle();
+    expect(chrome.tabs.create).toHaveBeenCalledWith(
+      expect.objectContaining({ active: true, windowId: 3, index: 5 }),
+    );
+  });
+
   it('shows the address as text, never as a link', async () => {
     // This page is web-accessible: whatever is in the query string came from
     // somewhere that is not us, and a clickable version of it would be a
@@ -572,5 +595,105 @@ describe('the rules, which the popup used to report as a number', () => {
     await mount({ revision: 'r', dryRun: false, rules: [] });
     expect($('rules-section').hidden).toBe(false);
     expect(rows()).toEqual([]);
+  });
+});
+
+describe('the toolbar panel', () => {
+  // The override was reachable, in the sense that a right-click on a tab strip
+  // is reachable. It is now the toolbar button, which is the difference between
+  // shipped and usable. What this file guards is that the panel never offers a
+  // move that costs something and buys nothing.
+
+  const WORK = { name: 'work', cookieStoreId: 'firefox-container-2', colorCode: '#f00' };
+  const HOME = { name: 'personal', cookieStoreId: 'firefox-container-1', colorCode: '#0f0' };
+
+  async function mountPanel({ tab, containers = [WORK, HOME], granted = true } = {}) {
+    document.documentElement.innerHTML = html('src/switch/switch.html');
+    globalThis.chrome = {
+      runtime: {
+        sendMessage: vi.fn(async () => ({ moved: true })),
+        openOptionsPage: vi.fn(async () => {}),
+      },
+      tabs: { query: vi.fn(async () => (tab ? [tab] : [])) },
+      // An optional permission that was never granted: the namespace is there,
+      // the answer is false. Modelling it as absent is a different bug.
+      permissions: { contains: vi.fn(async () => granted), request: vi.fn(async () => true) },
+    };
+    globalThis.browser = { contextualIdentities: { query: async () => containers } };
+    window.close = vi.fn();
+    vi.resetModules();
+    await import('../src/switch/switch.js');
+    await settle();
+  }
+
+  const inWork = {
+    id: 7,
+    url: 'https://code.example.com/dash',
+    cookieStoreId: 'firefox-container-2',
+  };
+
+  it('names where the tab is now, and does not offer to put it back there', async () => {
+    // The whole cost of a move is a lost history and a lost scroll position. A
+    // move to the container the tab is already in pays that for nothing, so the
+    // current container is stated as a fact rather than drawn as a choice.
+    await mountPanel({ tab: inWork });
+    expect($('here-name').textContent).toBe('work');
+    expect(labels()).toEqual(['personal', 'No container']);
+  });
+
+  it('offers no way out of a container the tab is not in', async () => {
+    // "No container" IS the current container here, so by the same rule it is
+    // not a destination.
+    await mountPanel({ tab: { ...inWork, cookieStoreId: 'firefox-default' } });
+    expect($('here-name').textContent).toBe('No container');
+    expect(labels()).toEqual(['work', 'personal']);
+  });
+
+  it('shows the host as text, never as a link', async () => {
+    // Same posture as the picker. This one is not web-accessible, but the string
+    // still came off a page somebody visited, and the rule is cheaper to keep
+    // than to reason about per page.
+    await mountPanel({ tab: inWork });
+    expect($('host').textContent).toBe('code.example.com');
+    expect($('host').querySelector('a')).toBeNull();
+  });
+
+  it('says there is nothing to move on a page that has no container', async () => {
+    await mountPanel({ tab: { id: 7, url: 'about:config', cookieStoreId: 'firefox-default' } });
+    expect($('nothing').hidden).toBe(false);
+    expect($('move').hidden).toBe(true);
+  });
+
+  it('hands the move to the background, with both ends of it named', async () => {
+    // Not tabs.create here: openThere() announces the move to linkward before
+    // the tab exists and writes the OVERRIDE line into the log, and a second
+    // copy of that sequence is the copy that goes stale.
+    await mountPanel({ tab: inWork });
+    buttons()[0].click();
+    await settle();
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+      type: 'cc:override',
+      tabId: 7,
+      url: 'https://code.example.com/dash',
+      from: 'firefox-container-2',
+      to: 'firefox-container-1',
+    });
+    expect(window.close).toHaveBeenCalled();
+  });
+
+  it('still moves tabs on a profile that never granted the watching permission', async () => {
+    // The point of using activeTab. Automatic routing is off without the grant;
+    // moving a tab by hand needs no host permission at all, and putting the one
+    // control this panel has behind a grant it does not need would be this
+    // extension's signature failure with a new coat on.
+    await mountPanel({ tab: inWork, granted: false });
+    expect($('warn').hidden).toBe(false);
+    expect($('move').hidden).toBe(false);
+    expect(labels()).toEqual(['personal', 'No container']);
+  });
+
+  it('keeps quiet about the grant once it has it', async () => {
+    await mountPanel({ tab: inWork, granted: true });
+    expect($('warn').hidden).toBe(true);
   });
 });

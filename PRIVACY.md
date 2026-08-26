@@ -48,6 +48,7 @@ a new release.
 | `bookmarks`                                      | Only to look up which mapped folder a bookmarked address is filed in, and only if you configure bookmark folders. It never reads a bookmark you have not mapped.                                                                                                  |
 | `storage`                                        | Session state, as listed above.                                                                                                                                                                                                                                   |
 | `menus`                                          | The "Reopen this tab in …" command.                                                                                                                                                                                                                               |
+| `activeTab`                                      | The address of the tab you are looking at, and only while you have the toolbar panel open. It is what lets "move this tab" work on a profile that never granted the watching permission above.                                                                    |
 
 ## Reading the code
 
