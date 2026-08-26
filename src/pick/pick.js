@@ -86,8 +86,21 @@ async function open(cookieStoreId) {
   await chrome.runtime
     .sendMessage('linkward@sapn95.github.io', { type: 'cc:claim', url: target, cookieStoreId })
     .catch(() => {});
+  // A14, the same rule the background applies to the override: the replacement
+  // stands where the original stood. This page IS the original — it was reached
+  // by redirecting the tab rather than by opening a new one — so its window and
+  // its position are the ones to keep.
+  //
+  // Each field only if we have it. `undefined + 1` is NaN, tabs.create rejects
+  // that as a type error, and the catch below turns the rejection into a picker
+  // that swallows every choice you make on it.
+  const place = {
+    active: typeof tab?.active === 'boolean' ? tab.active : true,
+    ...(Number.isInteger(tab?.windowId) ? { windowId: tab.windowId } : {}),
+    ...(Number.isInteger(tab?.index) ? { index: tab.index + 1 } : {}),
+  };
   const created = await chrome.tabs
-    .create({ url: target, active: true, ...(cookieStoreId ? { cookieStoreId } : {}) })
+    .create({ url: target, ...place, ...(cookieStoreId ? { cookieStoreId } : {}) })
     .catch(() => null);
   if (!created) return;
   if (tab?.id !== undefined) await chrome.tabs.remove(tab.id).catch(() => {});

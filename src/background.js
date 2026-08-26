@@ -310,18 +310,24 @@ async function listContainers() {
 async function openThere(tabId, url, cookieStoreId) {
   // A14: the replacement stands where the original stood.
   //
-  // This was written down in docs/architecture.md for four releases and never
-  // implemented — `active: true` was hardcoded, so a middle-clicked background
-  // tab was reopened in front of whatever you were reading, at the end of the
-  // strip. Same shape as the three failures in the catalogue: promised in
-  // prose, absent from the code, and silent about it.
-  //
+  // docs/architecture.md promised this from 0.1.0 and nothing implemented it —
+  // `active: true` was hardcoded and neither of the other two was passed, so
+  // every reopen jumped to the front of the window and the end of the strip.
   // index, windowId and active are not gated properties, so reading them back
   // needs no permission this extension does not already hold.
+  //
+  // Each field is carried over only if the browser gave us one. A tab that has
+  // already gone answers without an index, and `undefined + 1` is NaN, which
+  // tabs.create rejects as a type error, which the catch below swallows — so
+  // the symptom of getting this wrong is that NOTHING is routed, anywhere,
+  // silently. The first draft of this did exactly that, and the suite stayed
+  // green because the fake tabs.create shrugged at NaN where Firefox does not.
   const from = typeof tabId === 'number' ? await chrome.tabs.get(tabId).catch(() => null) : null;
-  const place = from
-    ? { active: from.active !== false, windowId: from.windowId, index: from.index + 1 }
-    : { active: true };
+  const place = {
+    active: typeof from?.active === 'boolean' ? from.active : true,
+    ...(Number.isInteger(from?.windowId) ? { windowId: from.windowId } : {}),
+    ...(Number.isInteger(from?.index) ? { index: from.index + 1 } : {}),
+  };
 
   // Announced BEFORE the tab exists, and awaited: linkward would otherwise see
   // a fresh, opener-less http tab and offer a picker for a tab this extension

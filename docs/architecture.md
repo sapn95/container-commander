@@ -237,6 +237,10 @@ the same position. Routing that steals focus is a different kind of wrong.
 > reason: the failing path is a silent `catch` or an unread default, and prose
 > is not executable. Found the same way too, by reading the code against the
 > prose rather than the prose on its own.
+>
+> The rule applies wherever a tab is replaced, so the picker at rung 5 carries
+> it as well. A14 true in one of the two places it applies is how a claim in
+> this file quietly stops being a claim.
 
 ---
 

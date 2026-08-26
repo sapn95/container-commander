@@ -32,8 +32,17 @@ async function mountPicker(query) {
   globalThis.location = new URL(`moz-extension://cc/pick/pick.html${query}`);
   globalThis.chrome = {
     tabs: {
-      getCurrent: vi.fn(async () => ({ id: 5 })),
-      create: vi.fn(async () => ({ id: 9 })),
+      getCurrent: vi.fn(async () => ({ id: 5, active: true, windowId: 3, index: 4 })),
+      // As strict as the browser about the two fields that are easy to compute
+      // into nonsense: tabs.create rejects a non-integer index or windowId, and
+      // the catch around it would turn that into a picker that silently eats
+      // every choice made on it.
+      create: vi.fn(async (props = {}) => {
+        for (const k of ['index', 'windowId']) {
+          if (k in props && !Number.isInteger(props[k])) throw new Error(`bad ${k}`);
+        }
+        return { id: 9 };
+      }),
       remove: vi.fn(async () => {}),
     },
     runtime: { sendMessage: vi.fn(async () => ({ ok: true })) },
@@ -58,6 +67,19 @@ afterEach(() => {
 });
 
 describe('the picker', () => {
+  it('puts the replacement where the tab it replaces stood', async () => {
+    // A14, and this page is the one the rule redirected — so its window and its
+    // position are the ones worth keeping. Same fix as the override path, made
+    // at the same time, because A14 being true in one of the two places it
+    // applies is how a claim in the docs quietly stops being a claim.
+    await mountPicker('?url=https://example.com/');
+    buttons()[0].click();
+    await settle();
+    expect(chrome.tabs.create).toHaveBeenCalledWith(
+      expect.objectContaining({ active: true, windowId: 3, index: 5 }),
+    );
+  });
+
   it('shows the address as text, never as a link', async () => {
     // This page is web-accessible: whatever is in the query string came from
     // somewhere that is not us, and a clickable version of it would be a

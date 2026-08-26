@@ -77,7 +77,19 @@ function makeChrome({ granted = true, policy = POLICY, windows = true } = {}) {
       onCreated: makeEvent(),
       onRemoved: makeEvent(),
       get: vi.fn(async () => ({ id: 7, cookieStoreId: 'firefox-default' })),
-      create: vi.fn(async () => ({ id: 42 })),
+      // As strict as the real one about the two fields that are easy to compute
+      // into nonsense. tabs.create rejects a non-integer index or windowId with
+      // a type error; openThere() catches everything and releases the claim, so
+      // a fake that shrugs at NaN turns "nothing is ever routed" into a green
+      // suite. That is how `index: undefined + 1` got as far as a review.
+      create: vi.fn(async (props = {}) => {
+        for (const k of ['index', 'windowId']) {
+          if (k in props && !Number.isInteger(props[k])) {
+            throw new Error(`Type error for parameter createProperties: .${k} is not an integer`);
+          }
+        }
+        return { id: 42 };
+      }),
       remove: vi.fn(async () => {}),
     },
     bookmarks: { getTree: async () => [] },
@@ -526,6 +538,29 @@ describe('the toolbar button', () => {
     expect(c.tabs.create).toHaveBeenCalledWith(
       expect.objectContaining({ active: false, windowId: 3, index: 5 }),
     );
+  });
+
+  it('falls back to opening in front when the old tab tells it nothing', async () => {
+    // The default fake answers tabs.get without an index or a windowId, which is
+    // what a tab that has already gone answers with. Computing `index + 1` off
+    // that gives NaN, tabs.create rejects it, the catch swallows it — and the
+    // symptom is that NOTHING is ever routed, anywhere, silently.
+    const c = await boot();
+    sendTo(c, {
+      type: 'cc:override',
+      tabId: 7,
+      url: 'https://example.com/doc',
+      from: '',
+      to: 'firefox-container-2',
+    });
+    await settle(20);
+    expect(c.tabs.create).toHaveBeenCalledWith(
+      expect.objectContaining({ url: 'https://example.com/doc', active: true }),
+    );
+    const [props] = c.tabs.create.mock.calls.at(-1);
+    expect(props).not.toHaveProperty('index');
+    expect(props).not.toHaveProperty('windowId');
+    expect(c.tabs.remove).toHaveBeenCalledWith(7);
   });
 
   it('treats firefox-default and no container as the same place', async () => {
