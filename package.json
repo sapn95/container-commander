@@ -1,8 +1,8 @@
 {
   "name": "container-commander",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
-  "description": "One thing decides which Firefox container a tab opens in \u2014 once, at entry.",
+  "description": "One thing decides which Firefox container a tab opens in — once, at entry.",
   "type": "module",
   "license": "MIT",
   "scripts": {
