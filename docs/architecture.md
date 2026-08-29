@@ -402,6 +402,30 @@ input and carries out the verb — and nothing else.
 
 ---
 
+### The badge says which of the two ways it is switched off
+
+There are two, and until 0.5.1 only one of them showed. `inert` — no policy —
+put a `!` on the icon from the start. The other was silent: a policy loaded, no
+permission to watch, `webRequest` not merely empty but **absent**, so
+`armRequests()` threw on its first line, the catch swallowed it, nothing was
+ever registered, and the icon carried nothing at all.
+
+That is the healthiest-looking state in the whole design being the one where the
+extension is structurally unable to decide anything — the failure this
+repository is arranged around, sitting in its own toolbar and unlabelled.
+
+`armRequests()` records whether it succeeded. The badge is red when either is
+wrong, and the tooltip names **both** when both are, because two problems at
+once must not hide one of them. It clears the moment `permissions.onAdded`
+re-arms, so the warning never outlives its cause; one that does teaches people
+to ignore warnings.
+
+Diagnosing this state before the badge existed meant decoding a Firefox
+profile's session store and permission store off disk by hand, and the answer
+was still a guess.
+
+---
+
 ## 15. Non-goals
 
 - No Chromium. Containers are Firefox-only.
