@@ -456,7 +456,7 @@ async function refresh() {
 }
 
 /**
- * Two ways to be switched off, and until 0.6.0 only one of them showed.
+ * Two ways to be switched off, and until 0.5.1 only one of them showed.
  *
  * `inert` — no policy — already put a `!` on the icon. The other way is worse
  * and was silent: a policy loaded, no permission to watch, nothing decided, and
