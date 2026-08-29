@@ -169,10 +169,20 @@ npm ci && npm run build
 then `about:debugging` → **This Firefox** → **Load Temporary Add-on** →
 `dist/manifest.json`.
 
-It will do **nothing at all** until a policy exists, and it says so on the
-toolbar badge. That is not a broken install: the extension ships no rules by
-design, and the policy arrives from your own config repository as a managed
-storage file — see [docs/publishing.md](docs/publishing.md#the-policy-file-is-not-part-of-the-release).
+It will do **nothing at all** until two things are true, and the toolbar badge
+carries a red `!` until both are — hover it and it names whichever is missing:
+
+1. **It is allowed to watch navigation.** `webRequest` and `<all_urls>` are
+   optional and asked for at runtime, from the add-on's own pages, because an
+   add-on that demands "access your data for all websites" at install to do
+   nothing until you also hand it a policy is one nobody installs. Click the
+   toolbar button and grant it there.
+2. **A policy exists.** The extension ships no rules by design; the policy
+   arrives from your own config repository as a managed storage file — see
+   [docs/publishing.md](docs/publishing.md#the-policy-file-is-not-part-of-the-release).
+
+Neither is a broken install. The badge exists because the state where the
+policy is loaded and the grant is missing used to look like a healthy one.
 
 It makes no network requests of its own, and everything it remembers dies with
 the browser: [PRIVACY.md](PRIVACY.md).

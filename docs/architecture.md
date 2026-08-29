@@ -358,6 +358,7 @@ Ordered so that at no point do two enforcing routers overlap:
 | `src/background.js`                         | synchronous arming, input assembly, execution of a `Decision`                                              |
 | `src/pick/`                                 | the picker, following linkward's defensive posture                                                         |
 | `src/popup/`                                | revision, age, peer skew, Pause, Reload — built **early**, not last                                        |
+| `src/switch/`                               | the toolbar panel: the human override, with a place to stand                                               |
 
 ### The pure core
 
