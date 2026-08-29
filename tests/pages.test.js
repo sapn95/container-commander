@@ -604,6 +604,10 @@ describe('the toolbar panel', () => {
   // shipped and usable. What this file guards is that the panel never offers a
   // move that costs something and buys nothing.
 
+  // Firefox dismissing or refusing the permission prompt, which is a different
+  // outcome from never having asked and has its own branch in the panel.
+  let chromeRefuses = false;
+
   const WORK = { name: 'work', cookieStoreId: 'firefox-container-2', colorCode: '#f00' };
   const HOME = { name: 'personal', cookieStoreId: 'firefox-container-1', colorCode: '#0f0' };
 
@@ -617,14 +621,23 @@ describe('the toolbar panel', () => {
       tabs: { query: vi.fn(async () => (tab ? [tab] : [])) },
       // An optional permission that was never granted: the namespace is there,
       // the answer is false. Modelling it as absent is a different bug.
-      permissions: { contains: vi.fn(async () => granted), request: vi.fn(async () => true) },
+      permissions: {
+        contains: vi.fn(async () => granted),
+        request: vi.fn(async () => !chromeRefuses),
+      },
     };
     globalThis.browser = { contextualIdentities: { query: async () => containers } };
     window.close = vi.fn();
+    // jsdom refuses a real navigation, and the grant path reloads the panel to
+    // rebuild it against the permission it has just been given.
+    globalThis.location = { href: 'moz-extension://cc/switch/switch.html', reload: vi.fn() };
     vi.resetModules();
     await import('../src/switch/switch.js');
     await settle();
   }
+
+  const press = (key) =>
+    document.dispatchEvent(new window.KeyboardEvent('keydown', { key, cancelable: true }));
 
   const inWork = {
     id: 7,
@@ -695,5 +708,59 @@ describe('the toolbar panel', () => {
   it('keeps quiet about the grant once it has it', async () => {
     await mountPanel({ tab: inWork, granted: true });
     expect($('warn').hidden).toBe(true);
+  });
+
+  it('rebuilds itself once the grant is given, rather than lying until reopened', async () => {
+    await mountPanel({ tab: inWork, granted: false });
+    $('grant-button').click();
+    await settle();
+    expect(chrome.permissions.request).toHaveBeenCalled();
+    expect(location.reload).toHaveBeenCalled();
+  });
+
+  it('stops offering a grant Firefox has just refused', async () => {
+    // Leaving the button live invites a second dismissal, and a permission
+    // prompt dismissed twice is one Firefox stops showing.
+    chromeRefuses = true;
+    await mountPanel({ tab: inWork, granted: false });
+    $('grant-button').click();
+    await settle();
+    expect($('grant-button').disabled).toBe(true);
+    expect(location.reload).not.toHaveBeenCalled();
+    chromeRefuses = false;
+  });
+
+  it('takes 1-9 for the choices, as the picker does', async () => {
+    await mountPanel({ tab: inWork });
+    press('2');
+    await settle();
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ to: '' }));
+  });
+
+  it('leaves the browser its own modified keys', async () => {
+    // Taking Cmd-C from somebody copying the host off this panel would be its
+    // own small betrayal.
+    await mountPanel({ tab: inWork });
+    document.dispatchEvent(
+      new window.KeyboardEvent('keydown', { key: '1', metaKey: true, cancelable: true }),
+    );
+    await settle();
+    expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('opens the settings page and gets out of the way', async () => {
+    await mountPanel({ tab: inWork });
+    $('settings').click();
+    await settle();
+    expect(chrome.runtime.openOptionsPage).toHaveBeenCalled();
+    expect(window.close).toHaveBeenCalled();
+  });
+
+  it('says nothing to move when there is no tab to read at all', async () => {
+    // tabs.query rejecting, or answering with nothing: a window closing under
+    // the panel, or a profile where the click did not grant activeTab.
+    await mountPanel({ tab: null });
+    expect($('nothing').hidden).toBe(false);
+    expect($('move').hidden).toBe(true);
   });
 });

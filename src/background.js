@@ -54,17 +54,33 @@ function onBeforeRequest(details) {
   });
 }
 
+/**
+ * Whether onBeforeRequest is actually registered.
+ *
+ * Not a convenience flag. Without the optional grant `chrome.webRequest` is not
+ * merely empty, it is ABSENT, so the line below throws and the catch swallows
+ * it — and from the outside that is indistinguishable from an extension that is
+ * watching and has had a quiet day. This is the one thing this file knows that
+ * nothing else can find out, so it is recorded and reported rather than left as
+ * the shape of a silence.
+ */
+let watching = false;
+
 function armRequests() {
   try {
-    if (chrome.webRequest.onBeforeRequest.hasListener(onBeforeRequest)) return;
-    chrome.webRequest.onBeforeRequest.addListener(
-      onBeforeRequest,
-      { urls: ['http://*/*', 'https://*/*'], types: ['main_frame'] },
-      ['blocking'],
-    );
+    if (!chrome.webRequest.onBeforeRequest.hasListener(onBeforeRequest)) {
+      chrome.webRequest.onBeforeRequest.addListener(
+        onBeforeRequest,
+        { urls: ['http://*/*', 'https://*/*'], types: ['main_frame'] },
+        ['blocking'],
+      );
+    }
+    watching = true;
   } catch {
     // No permission yet. permissions.onAdded brings us back here.
+    watching = false;
   }
+  badge();
 }
 
 function onFocusChanged(windowId) {
@@ -439,9 +455,31 @@ async function refresh() {
   badge();
 }
 
+/**
+ * Two ways to be switched off, and until 0.6.0 only one of them showed.
+ *
+ * `inert` — no policy — already put a `!` on the icon. The other way is worse
+ * and was silent: a policy loaded, no permission to watch, nothing decided, and
+ * an icon with nothing on it. The state that looks healthiest is the one where
+ * the extension is structurally unable to do anything at all, which is the
+ * failure this whole repository is arranged around, sitting in its own toolbar.
+ */
 function badge() {
-  const text = loaded.inert ? '!' : '';
-  chrome.action?.setBadgeText?.({ text }).catch?.(() => {});
+  const problem = !watching || loaded.inert;
+  chrome.action?.setBadgeText?.({ text: problem ? '!' : '' }).catch?.(() => {});
+  // Red rather than the default grey. A badge you have to squint at to classify
+  // is a badge that gets classified as decoration.
+  chrome.action?.setBadgeBackgroundColor?.({ color: '#c0392b' }).catch?.(() => {});
+  chrome.action?.setTitle?.({ title: title() }).catch?.(() => {});
+}
+
+/** Said in full: two problems at once must not hide one of them. */
+function title() {
+  const wrong = [];
+  if (!watching) wrong.push('not watching navigation');
+  if (loaded.inert) wrong.push('no policy installed');
+  if (!wrong.length) return 'container commander — move this tab';
+  return `container commander — ${wrong.join(', ')}. Nothing is being decided. Click to fix.`;
 }
 
 // Read by the popup, which is the honest answer to managed storage not being

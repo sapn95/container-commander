@@ -62,7 +62,12 @@ function makeChrome({ granted = true, policy = POLICY, windows = true } = {}) {
       onMessage: makeEvent(),
       onMessageExternal: makeEvent(),
     },
-    action: { onClicked: makeEvent(), setBadgeText: vi.fn(async () => {}) },
+    action: {
+      onClicked: makeEvent(),
+      setBadgeText: vi.fn(async () => {}),
+      setBadgeBackgroundColor: vi.fn(async () => {}),
+      setTitle: vi.fn(async () => {}),
+    },
     storage: {
       session: makeArea(),
       managed: {
@@ -325,6 +330,54 @@ describe('when there is no policy at all', () => {
     const reply = vi.fn();
     c.runtime.onMessage.emitSync({ type: 'cc:status' }, {}, reply);
     expect(reply).toHaveBeenCalledWith(expect.objectContaining({ inert: true }));
+  });
+});
+
+describe('when it is not allowed to watch', () => {
+  // The worse of the two ways to be switched off, and the one that was silent.
+  // A policy loaded and no permission to see navigation is an extension that is
+  // structurally unable to decide anything — and it looked EXACTLY like one
+  // having a quiet day, because `inert` was false and the badge was therefore
+  // empty. Diagnosing it took reading a profile off disk and still not being
+  // sure. The icon now says so.
+
+  const badgeText = (c) => c.action.setBadgeText.mock.calls.at(-1)[0].text;
+  const tooltip = (c) => c.action.setTitle.mock.calls.at(-1)[0].title;
+
+  it('marks the icon even though the policy is fine', async () => {
+    const c = await boot({ granted: false });
+    expect(c.action.setBadgeText).toHaveBeenCalledWith({ text: '!' });
+    expect(badgeText(c)).toBe('!');
+  });
+
+  it('says which of the two things is wrong, in words', async () => {
+    const c = await boot({ granted: false });
+    expect(tooltip(c)).toMatch(/not watching/i);
+    expect(tooltip(c)).not.toMatch(/no policy/i);
+  });
+
+  it('names both when both are wrong, rather than the first it finds', async () => {
+    const c = await boot({ granted: false, policy: null });
+    expect(tooltip(c)).toMatch(/not watching/i);
+    expect(tooltip(c)).toMatch(/no policy/i);
+  });
+
+  it('clears the mark once the grant arrives, without a restart', async () => {
+    // permissions.onAdded re-arms the listener. If the badge were only written
+    // on a config load it would keep the warning until the next browser start,
+    // and a warning that outlives its cause teaches people to ignore warnings.
+    const c = await boot({ granted: false });
+    expect(badgeText(c)).toBe('!');
+    c.webRequest = { onBeforeRequest: makeEvent() };
+    await c.permissions.onAdded.emit({});
+    await settle(20);
+    expect(badgeText(c)).toBe('');
+    expect(tooltip(c)).toBe('container commander — move this tab');
+  });
+
+  it('says nothing at all when both are in order', async () => {
+    const c = await boot();
+    expect(badgeText(c)).toBe('');
   });
 });
 
