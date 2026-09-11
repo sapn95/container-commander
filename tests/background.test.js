@@ -333,6 +333,127 @@ describe('when there is no policy at all', () => {
   });
 });
 
+describe('a bookmark click, end to end', () => {
+  // Reported as "clicking a bookmark always opens two tabs with the same page".
+  // `browser.tabs.loadBookmarksInTabs` makes every bookmark a NEW tab, which
+  // turned the reopen path from something that ran occasionally into the most
+  // common thing this extension does — so it is worth a test that walks the
+  // whole sequence rather than one listener at a time.
+  //
+  // Both orderings, because they are not the same run. Firefox dispatches
+  // onCreated on its own schedule: it can arrive before tabs.create resolves or
+  // after, and after is the interesting one — openThere's bind and candidate
+  // delete have already happened, and onCreated then puts the replacement tab
+  // back into `candidates`. If `ours` did not outrank that, the replacement's
+  // own first request would be reopened again and the click would cost two tabs.
+
+  function wire(c, { onCreatedAfterCreate }) {
+    const tabs = new Map();
+    let nextId = 100;
+    c.tabs.get = vi.fn(
+      async (id) =>
+        tabs.get(id) ?? {
+          id,
+          cookieStoreId: 'firefox-default',
+          active: true,
+          windowId: 1,
+          index: 0,
+        },
+    );
+    c.tabs.create = vi.fn(async (props) => {
+      const t = {
+        id: nextId++,
+        url: props.url,
+        cookieStoreId: props.cookieStoreId ?? 'firefox-default',
+        active: props.active ?? true,
+        windowId: props.windowId ?? 1,
+        index: props.index ?? 0,
+      };
+      tabs.set(t.id, t);
+      if (onCreatedAfterCreate) queueMicrotask(() => c.tabs.onCreated.emit(t));
+      else await c.tabs.onCreated.emit(t);
+      return t;
+    });
+    c.tabs.remove = vi.fn(async (id) => {
+      tabs.delete(id);
+      await c.tabs.onRemoved.emit(id);
+    });
+    return () => [...tabs.values()];
+  }
+
+  for (const onCreatedAfterCreate of [false, true]) {
+    const when = onCreatedAfterCreate
+      ? 'after tabs.create resolves'
+      : 'before tabs.create resolves';
+
+    it(`costs one tab, not two, when onCreated arrives ${when}`, async () => {
+      const c = await boot({
+        containers: [{ name: 'work', cookieStoreId: 'firefox-container-2' }],
+      });
+      const open = wire(c, { onCreatedAfterCreate });
+
+      // Firefox opens a brand-new tab for the bookmark, and reports the real
+      // address in onCreated — not about:blank, which is Chrome's shape and
+      // would fail isCandidateTab before any rule was read.
+      await c.tabs.onCreated.emit({
+        id: 7,
+        url: 'https://example.com/doc',
+        cookieStoreId: 'firefox-default',
+        active: true,
+        windowId: 1,
+        index: 0,
+      });
+      const answer = await request(c, { url: 'https://example.com/doc' });
+      await settle(60);
+
+      expect(answer).toEqual({ cancel: true });
+      expect(c.tabs.create).toHaveBeenCalledTimes(1);
+      expect(c.tabs.remove).toHaveBeenCalledWith(7);
+      expect(open()).toHaveLength(1);
+      expect(open()[0].cookieStoreId).toBe('firefox-container-2');
+    });
+
+    it(`leaves its own replacement alone when onCreated arrives ${when}`, async () => {
+      // The replacement issues the same address a moment later. It must be
+      // recognised as ours, or the extension chases its own tail one tab at a
+      // time — which is exactly what "two tabs with the same page" looks like.
+      const c = await boot({
+        containers: [{ name: 'work', cookieStoreId: 'firefox-container-2' }],
+      });
+      wire(c, { onCreatedAfterCreate });
+
+      await c.tabs.onCreated.emit({
+        id: 7,
+        url: 'https://example.com/doc',
+        cookieStoreId: 'firefox-default',
+        active: true,
+        windowId: 1,
+        index: 0,
+      });
+      await request(c, { url: 'https://example.com/doc' });
+      await settle(60);
+
+      const replacement = (await c.tabs.create.mock.results[0].value).id;
+      const again = await request(c, { url: 'https://example.com/doc', tabId: replacement });
+      await settle(60);
+
+      expect(again).toEqual({});
+      expect(c.tabs.create).toHaveBeenCalledTimes(1);
+
+      // On the REASON and not only on the count. Two independent things keep
+      // the replacement safe — the binding, and rung 2 standing down on a tab
+      // that already carries a container — so counting tabs stays green while
+      // the designed guard quietly stops working. Naming the rung is what makes
+      // this a test of the claim rather than of the coincidence.
+      let status;
+      c.runtime.onMessage.emitSync({ type: 'cc:status' }, {}, (r) => {
+        status = r;
+      });
+      expect(status.log[0].decision.reason).toBe('claim:bound');
+    });
+  }
+});
+
 describe('when it is not allowed to watch', () => {
   // The worse of the two ways to be switched off, and the one that was silent.
   // A policy loaded and no permission to see navigation is an extension that is

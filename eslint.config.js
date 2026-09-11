@@ -26,6 +26,9 @@ const BROWSER = {
 // dependency — so the three web globals it needs are listed here and not
 // borrowed from BROWSER, which is about what the extension may touch.
 const NODE = {
+  // Only a test uses this: modelling Firefox dispatching tabs.onCreated on its
+  // own schedule rather than inside tabs.create.
+  queueMicrotask: 'readonly',
   process: 'readonly',
   Buffer: 'readonly',
   fetch: 'readonly',
