@@ -32,6 +32,17 @@ $('grant-button').addEventListener('click', async (event) => {
   else event.target.disabled = true;
 });
 
+// Not awaited before the panel is drawn. This asks two other extensions and one
+// of them may be asleep; the thing this popup is FOR must not wait on that.
+chrome.runtime
+  .sendMessage({ type: 'cc:peers' })
+  .then((peers) => {
+    if (!peers?.line) return;
+    $('clash-line').textContent = peers.line;
+    $('clash').hidden = false;
+  })
+  .catch(() => {});
+
 $('settings').addEventListener('click', () => {
   chrome.runtime.openOptionsPage().catch(() => {});
   window.close();

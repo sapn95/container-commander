@@ -1,10 +1,11 @@
 # The failure catalogue
 
-Seven failures, all observed in production on a real multi-identity Firefox
-profile, most of them within one week. They are the reason this project exists
-and they are the acceptance criteria: **every entry here is an executable
-regression test**, and a design change that lets one of them return is a
-regression whatever else it improves.
+Eight failures, all observed in production on a real multi-identity Firefox
+profile. Six of them inside one week, which is what started this; F8 surfaced
+much later, and how long it hid is the interesting part of it. They are the
+reason this project exists and they are the acceptance criteria: **every entry
+here is an executable regression test**, and a design change that lets one of
+them return is a regression whatever else it improves.
 
 Hosts and identifiers are generalised — see [ADR-0011](adr/0011-employer-neutral-public-repo.md).
 Three containers throughout: `personal`, `work`, `admin`, each holding a
@@ -121,3 +122,46 @@ traces back to one of these:
 | Two blocking listeners have no defined order                     | the race in F2 is not winnable, only avoidable                                    |
 | `storage.managed` is read once per extension start               | config staleness must be _shown_, not denied                                      |
 | No extension can see which extension opened a tab                | the claim protocol is not a convenience, it is the only way                       |
+| No extension can enumerate another extension's listeners         | "is something else also routing?" has to be **asked**, and answered honestly — F8 |
+
+---
+
+## F8 — Both routers agreed, so every link opened twice
+
+**Observed:** every bookmark on seven hosts opened in **two** tabs. Same address,
+same container, both of them correct. Through the toolbar, through the launcher's
+keyboard shortcut, through a plain click — always exactly two.
+
+Commander was routing `*.example.com` from managed storage. linkward, which is
+also a router, held its own rules pinning `docs.example.com`, `code.example.com`
+and five more to the same container, with interception on. Both hold a
+**blocking** `onBeforeRequest`. Firefox hands one request to both, both answered
+`{cancel: true}`, both opened a replacement, and Firefox carried out both.
+
+**Why it took so long to find:** nothing was wrong. Both add-ons were doing
+precisely what they were configured to do, both reported themselves healthy,
+both were _right_ about where those hosts belong. Commander's badge could report
+the two ways it can be switched **off** and had no way to report being switched
+**on twice**. Neither extension could see the other, and neither could be made
+to: there is no API that lists another extension's webRequest listeners, and
+`management` wants a permission whose warning is worse than the bug. Agreement
+between the two was the cause, so every check either one could run on its own
+came back clean.
+
+The first hypotheses were all wrong for the same reason — they looked for a
+malfunction. Multi-Account Containers, the launcher issuing two `tabs.create`,
+`browser.tabs.loadBookmarksInTabs`, a duplicated listener registration. All
+eliminated. One request, two obedient routers.
+
+**Why no rule can fix it:** a rule is a statement about where a host belongs, and
+both statements were true. There is no policy either side can write that makes a
+second router stop cancelling.
+
+**The mechanism that prevents it:** it cannot be prevented, only made visible, so
+the answer is a census rather than a guard. Each participant answers `cc:ping`
+with `routing`, `dryRun` and its published `routes`
+([`src/lib/census.js`](../src/lib/census.js)), and each shows the result in its
+own UI: commander marks the toolbar badge and names the other add-on in the panel
+and the popup. The fix is then one click by a person — switch interception off in
+one of them — which is the correct resolution and not one an extension is
+entitled to make for its peer. See [protocol.md](protocol.md#ccping).

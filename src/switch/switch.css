@@ -50,14 +50,20 @@ body.panel .note {
   font-size: 11px;
 }
 
-#warn {
+#warn,
+#clash {
   margin: 0 0 14px;
   padding-bottom: 14px;
   border-bottom: 1px solid var(--border);
 }
 
-#warn .lead {
+#warn .lead,
+#clash .lead {
   margin: 0 0 8px;
+}
+
+#clash .note {
+  margin: 0;
 }
 
 #warn button {

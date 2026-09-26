@@ -354,10 +354,11 @@ Ordered so that at no point do two enforcing routers overlap:
 | `src/lib/candidates.js`, `src/lib/focus.js` | vendored verbatim from linkward — entry detection and the focus clock                                      |
 | `src/lib/claims.js`                         | counted URL-keyed registry, hands-off set, external message surface                                        |
 | `src/lib/config.js`                         | managed-storage loader; `validateConfig` shared with the compiler                                          |
+| `src/lib/census.js`                         | pure. What to answer a peer's `cc:ping` with, and what another one's answer means — F8                     |
 | `src/lib/bookmarks.js`                      | folder-path map, canonical index, context-menu launcher                                                    |
 | `src/background.js`                         | synchronous arming, input assembly, execution of a `Decision`                                              |
 | `src/pick/`                                 | the picker, following linkward's defensive posture                                                         |
-| `src/popup/`                                | revision, age, peer skew, Pause, Reload — built **early**, not last                                        |
+| `src/popup/`                                | revision, age, peer skew, the clash, Pause, Reload — built **early**, not last                             |
 | `src/switch/`                               | the toolbar panel: the human override, with a place to stand                                               |
 
 ### The pure core
@@ -402,27 +403,39 @@ input and carries out the verb — and nothing else.
 
 ---
 
-### The badge says which of the two ways it is switched off
+### The badge says which way it is not working
 
-There are two, and until 0.5.1 only one of them showed. `inert` — no policy —
-put a `!` on the icon from the start. The other was silent: a policy loaded, no
-permission to watch, `webRequest` not merely empty but **absent**, so
-`armRequests()` threw on its first line, the catch swallowed it, nothing was
-ever registered, and the icon carried nothing at all.
+Three states earn a `!`, and each one was invisible before it was found.
 
-That is the healthiest-looking state in the whole design being the one where the
-extension is structurally unable to decide anything — the failure this
-repository is arranged around, sitting in its own toolbar and unlabelled.
+**No policy.** `inert` put a `!` on the icon from the start.
 
-`armRequests()` records whether it succeeded. The badge is red when either is
-wrong, and the tooltip names **both** when both are, because two problems at
-once must not hide one of them. It clears the moment `permissions.onAdded`
-re-arms, so the warning never outlives its cause; one that does teaches people
-to ignore warnings.
+**No permission to watch.** A policy loaded, `webRequest` not merely empty but
+**absent**, so `armRequests()` threw on its first line, the catch swallowed it,
+nothing was ever registered, and the icon carried nothing at all. That is the
+healthiest-looking state in the whole design being the one where the extension is
+structurally unable to decide anything — the failure this repository is arranged
+around, sitting in its own toolbar and unlabelled. `armRequests()` now records
+whether it succeeded.
 
-Diagnosing this state before the badge existed meant decoding a Firefox
-profile's session store and permission store off disk by hand, and the answer
-was still a guess.
+**Switched on twice.** A second extension also holding a blocking listener also
+cancelling the same request. One navigation, two tabs, and both extensions
+healthy on their own evidence — F8. It cannot be detected, only asked about, so
+the badge here is fed by the peer census rather than by local state:
+`takeCensus()` sends `cc:ping` to the peers at every arm and refresh, and
+`clashes()` compares the answers against this extension's own.
+
+The badge is red when any of the three is wrong. The tooltip names **all** of
+them when more than one is, because two problems at once must not hide one of
+them, and it keeps the on/off kinds and the on-twice kind in separate sentences —
+"nothing is being decided" and "everything is being decided twice" are opposite
+instructions to the person reading it. It clears the moment `permissions.onAdded`
+re-arms or the next census comes back clean, so a warning never outlives its
+cause; one that does teaches people to ignore warnings.
+
+Diagnosing the second state before the badge existed meant decoding a Firefox
+profile's session store and permission store off disk by hand, and the answer was
+still a guess. The third took a week of looking for a malfunction that was not
+there.
 
 ---
 

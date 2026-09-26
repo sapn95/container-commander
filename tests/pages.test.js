@@ -191,12 +191,12 @@ describe('the picker', () => {
 });
 
 describe('the popup', () => {
-  async function mountPopup(status) {
+  async function mountPopup(status, peers = null) {
     document.documentElement.innerHTML = html('src/popup/popup.html');
     globalThis.chrome = {
       runtime: {
         getManifest: () => ({ version: '0.1.0' }),
-        sendMessage: vi.fn(async () => status),
+        sendMessage: vi.fn(async (m) => (m?.type === 'cc:peers' ? peers : status)),
         reload: vi.fn(),
       },
     };
@@ -256,6 +256,58 @@ describe('the popup', () => {
     expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'cc:pause', paused: true }),
     );
+  });
+
+  // Two extensions both holding a blocking webRequest listener both cancel the
+  // same request and both open a replacement, and Firefox carries out both. The
+  // rules on this page are then entirely accurate about where a host belongs,
+  // and the browser still opens two tabs for it — which is why this section sits
+  // above the policy rather than next to it.
+  const CLASH = {
+    clash: [
+      {
+        id: 'linkward@sapn95.github.io',
+        name: 'linkward',
+        version: '0.1.0',
+        routes: ['docs.example.com', 'code.example.com'],
+        overlap: ['docs.example.com'],
+      },
+    ],
+    line: 'linkward 0.1.0 is also routing navigation. Both route docs.example.com.',
+  };
+
+  it('stays out of the way when nothing else is routing', async () => {
+    await mountPopup(loaded, { clash: [], line: null });
+    expect($('clash').hidden).toBe(true);
+  });
+
+  it('names the other extension and the hosts they both claim', async () => {
+    await mountPopup(loaded, CLASH);
+    expect($('clash').hidden).toBe(false);
+    expect($('clash-line').textContent).toContain('linkward 0.1.0');
+    const row = document.querySelector('#clash-list li');
+    expect(row.textContent).toContain('linkward 0.1.0');
+    expect(row.textContent).toContain('docs.example.com');
+    // The overlap, not the peer's whole rule list: the shared hosts are the tabs
+    // arriving in pairs, and they are what to search the other add-on for.
+    expect(row.textContent).not.toContain('code.example.com');
+  });
+
+  it('falls back to the peer whole route list when nothing compares', async () => {
+    // A regex rule is published as an id on either side, so two extensions can
+    // collide on a host neither of them named in a comparable way. Showing the
+    // peer's list beats showing an empty bullet.
+    await mountPopup(loaded, {
+      clash: [{ ...CLASH.clash[0], overlap: [], routes: ['rule:msal'] }],
+      line: 'linkward 0.1.0 is also routing navigation.',
+    });
+    expect(document.querySelector('#clash-list li').textContent).toContain('rule:msal');
+  });
+
+  it('does not break the page when the background cannot answer', async () => {
+    await mountPopup(loaded, null);
+    expect($('clash').hidden).toBe(true);
+    expect($('revision').textContent).toBe('policy-abc');
   });
 });
 
@@ -611,11 +663,11 @@ describe('the toolbar panel', () => {
   const WORK = { name: 'work', cookieStoreId: 'firefox-container-2', colorCode: '#f00' };
   const HOME = { name: 'personal', cookieStoreId: 'firefox-container-1', colorCode: '#0f0' };
 
-  async function mountPanel({ tab, containers = [WORK, HOME], granted = true } = {}) {
+  async function mountPanel({ tab, containers = [WORK, HOME], granted = true, peers = null } = {}) {
     document.documentElement.innerHTML = html('src/switch/switch.html');
     globalThis.chrome = {
       runtime: {
-        sendMessage: vi.fn(async () => ({ moved: true })),
+        sendMessage: vi.fn(async (m) => (m?.type === 'cc:peers' ? peers : { moved: true })),
         openOptionsPage: vi.fn(async () => {}),
       },
       tabs: { query: vi.fn(async () => (tab ? [tab] : [])) },
@@ -745,7 +797,12 @@ describe('the toolbar panel', () => {
       new window.KeyboardEvent('keydown', { key: '1', metaKey: true, cancelable: true }),
     );
     await settle();
-    expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    // No MOVE, rather than no message at all: the panel asks the background who
+    // else is routing as it opens, so "nothing was sent" stopped being the way
+    // to say "nothing was done".
+    expect(chrome.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'cc:override' }),
+    );
   });
 
   it('opens the settings page and gets out of the way', async () => {
@@ -762,5 +819,28 @@ describe('the toolbar panel', () => {
     await mountPanel({ tab: null });
     expect($('nothing').hidden).toBe(false);
     expect($('move').hidden).toBe(true);
+  });
+
+  it('says when another extension is routing the same hosts', async () => {
+    await mountPanel({ tab: inWork, peers: { clash: [{}], line: 'linkward is also routing.' } });
+    expect($('clash').hidden).toBe(false);
+    expect($('clash-line').textContent).toBe('linkward is also routing.');
+  });
+
+  it('keeps the clash a strip and never a state', async () => {
+    // Moving a tab by hand works perfectly while two extensions fight over the
+    // automatic case. Hiding the one control on this panel behind that warning
+    // would be this extension's signature failure with a new coat on.
+    await mountPanel({ tab: inWork, peers: { clash: [{}], line: 'linkward is also routing.' } });
+    expect($('move').hidden).toBe(false);
+    expect(buttons().length).toBeGreaterThan(0);
+  });
+
+  it('draws the panel even if the census never comes back', async () => {
+    // It asks two other extensions and one of them may be asleep. The thing this
+    // popup is FOR must not wait on that.
+    await mountPanel({ tab: inWork, peers: null });
+    expect($('move').hidden).toBe(false);
+    expect($('clash').hidden).toBe(true);
   });
 });

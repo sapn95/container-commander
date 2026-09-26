@@ -42,6 +42,28 @@
         </p>
       </section>
 
+      <!-- Directly under the grant section, and for the mirror-image reason.
+           That one says nothing is being decided; this one says everything is
+           being decided twice. Both are states in which the rules below are
+           accurate and the browser does not behave as they describe, which is
+           the only kind of problem worth putting above the policy. -->
+      <section id="clash" hidden>
+        <h2>Another extension is also routing</h2>
+        <p class="lead" id="clash-line"></p>
+        <ul class="rules" id="clash-list"></ul>
+        <p class="note">
+          Firefox hands the same request to every add-on that asked to hold one, and none of them
+          can see the others &mdash; there is no way to list another add-on's listeners. So if two
+          of them both cancel a navigation and reopen it in a container, Firefox carries out both:
+          one click becomes two tabs, same address, same container. Neither add-on is
+          malfunctioning, which is why this went unnoticed for weeks and why this section exists.
+        </p>
+        <p class="note">
+          Pick one to do the routing and switch the other one's interception off. Both being right
+          about where a host belongs does not help &mdash; agreeing is what produces the pair.
+        </p>
+      </section>
+
       <!-- The first screen a stranger sees, and for a while the only one: the
            add-on ships no rules, so a fresh install genuinely does nothing. That
            is correct behaviour and it looks exactly like a broken install, which

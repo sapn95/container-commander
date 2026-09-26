@@ -7,12 +7,14 @@
 
 import { decide, RUNG } from './lib/engine.js';
 import { createClaims } from './lib/claims.js';
+import { clashes, clashLine, routingState } from './lib/census.js';
 import { loadConfig } from './lib/config.js';
 import { isCandidateTab } from './lib/candidates.js';
 import { noteFocusChange, readFocusState, seedFocusState } from './lib/focus.js';
 
 const PEERS = ['linkward@sapn95.github.io', 'beeline@sapn95.github.io'];
 const CLAIM_TIMEOUT_MS = 200;
+const CENSUS_TIMEOUT_MS = 2000;
 
 // tabId -> when it was flagged. A Map, not storage: this is per-session state,
 // and an event-page restart should forget a stale tab rather than ask about it.
@@ -262,11 +264,16 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
       claims.bind({ ...msg, sender: from });
       sendResponse({ ok: true });
       return true;
+    // Answers what this extension is DOING, not merely that it is installed.
+    // A peer needs that to warn its own user, and it has no other way to get
+    // it: webRequest listeners are not enumerable across extensions.
     case 'cc:ping':
       sendResponse({
-        name: 'container-commander',
+        id: chrome.runtime.id,
+        name: 'container commander',
         version: chrome.runtime.getManifest?.()?.version,
         revision: loaded.config?.revision ?? null,
+        ...routingState({ watching, inert: loaded.inert, paused, config: loaded.config }),
       });
       return true;
     default:
@@ -375,10 +382,10 @@ async function openThere(tabId, url, cookieStoreId) {
 }
 
 /** A peer being absent is the normal case, so this never rejects. */
-function tell(id, msg) {
+function tell(id, msg, timeoutMs = CLAIM_TIMEOUT_MS) {
   return Promise.race([
     chrome.runtime.sendMessage(id, msg).catch(() => null),
-    new Promise((resolve) => setTimeout(() => resolve(null), CLAIM_TIMEOUT_MS)),
+    new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs)),
   ]);
 }
 
@@ -453,19 +460,51 @@ async function refresh() {
   }));
   indexPromise = null;
   badge();
+  // Not awaited: the config is loaded and this extension is ready to decide.
+  // Whether somebody ELSE is also deciding is worth knowing without anybody
+  // opening a page, and worth nothing if it delays arming.
+  takeCensus().catch(() => {});
+}
+
+// --- Who else is routing ----------------------------------------------------
+//
+// Cached rather than polled. Probing on every badge() would put two cross-
+// extension round trips in front of every decision, and the answer only changes
+// when somebody installs or configures an extension — which is when a settings
+// page is open, which is when it gets re-asked.
+let clash = [];
+
+async function takeCensus() {
+  const self = routingState({ watching, inert: loaded.inert, paused, config: loaded.config });
+  // A longer grace than a claim gets. A claim is racing a request this extension
+  // is holding open, so 200 ms is a budget; nothing is waiting on this, and a
+  // peer's event page may be asleep and need waking. Too short here does not
+  // slow anything down — it just reports "no clash" about a live clash.
+  const answers = await Promise.all(
+    PEERS.map((id) => tell(id, { type: 'cc:ping' }, CENSUS_TIMEOUT_MS)),
+  );
+  clash = clashes(self, answers);
+  badge();
+  return { self, clash, line: clashLine(clash) };
 }
 
 /**
- * Two ways to be switched off, and until 0.5.1 only one of them showed.
+ * Three states worth a `!`, and each one was invisible in its turn.
  *
- * `inert` — no policy — already put a `!` on the icon. The other way is worse
- * and was silent: a policy loaded, no permission to watch, nothing decided, and
- * an icon with nothing on it. The state that looks healthiest is the one where
- * the extension is structurally unable to do anything at all, which is the
- * failure this whole repository is arranged around, sitting in its own toolbar.
+ * `inert` — no policy — already put a `!` on the icon at 0.1.0. The second was
+ * worse and silent until 0.5.1: a policy loaded, no permission to watch,
+ * nothing decided, and an icon with nothing on it. The state that looks
+ * healthiest is the one where the extension is structurally unable to do
+ * anything at all, which is the failure this whole repository is arranged
+ * around, sitting in its own toolbar.
+ *
+ * The third is the mirror image and it ran for weeks: another extension routing
+ * the same hosts, so every navigation to them opened TWICE. Both extensions
+ * were healthy on their own evidence, and neither had a way to see the other —
+ * webRequest listeners are not enumerable across extensions. See lib/census.js.
  */
 function badge() {
-  const problem = !watching || loaded.inert;
+  const problem = !watching || loaded.inert || clash.length > 0;
   chrome.action?.setBadgeText?.({ text: problem ? '!' : '' }).catch?.(() => {});
   // Red rather than the default grey. A badge you have to squint at to classify
   // is a badge that gets classified as decoration.
@@ -478,8 +517,15 @@ function title() {
   const wrong = [];
   if (!watching) wrong.push('not watching navigation');
   if (loaded.inert) wrong.push('no policy installed');
-  if (!wrong.length) return 'container commander — move this tab';
-  return `container commander — ${wrong.join(', ')}. Nothing is being decided. Click to fix.`;
+  if (wrong.length) {
+    return `container commander — ${wrong.join(', ')}. Nothing is being decided. Click to fix.`;
+  }
+  // Separate sentence, not a third item in that list: the two above mean
+  // nothing happens, this one means everything happens twice. Reading them as
+  // one list would put opposite failures behind the same wording.
+  const line = clashLine(clash);
+  if (line) return `container commander — ${line}`;
+  return 'container commander — move this tab';
 }
 
 // Read by the popup, which is the honest answer to managed storage not being
@@ -487,6 +533,18 @@ function title() {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type !== 'cc:status') return undefined;
   sendResponse({ ...loaded, paused, log: log.slice(0, 20) });
+  return true;
+});
+
+// Asked by both pages when they open, because that is when somebody is looking.
+// Separate from cc:status, which answers synchronously off local state; this one
+// waits on two other extensions and must not hold the rest of the page up.
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type !== 'cc:peers') return undefined;
+  takeCensus().then(
+    (result) => sendResponse(result),
+    () => sendResponse({ clash: [], line: null }),
+  );
   return true;
 });
 

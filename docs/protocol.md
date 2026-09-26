@@ -75,11 +75,20 @@ of its life rather than only for its first request.
 
 ### `cc:ping`
 
-The only message that carries a substantive reply.
+The only message that carries a substantive reply, and the only one anybody
+_asks_ rather than announces.
 
 ```js
 { type: 'cc:ping' }
-→ { name: 'linkward', version: '0.5.2', revision: 'policy-2026.08.16-a1b2c3d' }
+→ {
+    id: 'linkward@sapn95.github.io',
+    name: 'linkward',
+    version: '0.5.2',
+    revision: 'policy-2026.08.16-a1b2c3d',
+    routing: true,              // I would reopen a navigation I saw right now
+    dryRun: false,              // …or I would decide and cancel nothing
+    routes: ['*.example.com'],  // the host patterns, for a human to compare
+  }
 ```
 
 `revision` is the loaded **config** revision, and it exists because two
@@ -88,6 +97,41 @@ having been reloaded, one not. Commander gates external enforcement on
 agreement: a mismatch resolves external rules to leave-alone and raises a
 "peer config skew" badge, rather than letting the two disagree silently about
 who owns a link.
+
+#### `routing`, and why it is fields on this message rather than a fifth verb
+
+Two extensions that both hold a **blocking** `onBeforeRequest` both receive the
+same request. If both answer `{cancel: true}` and open a replacement, Firefox
+carries out both: one navigation becomes **two tabs**, same address, same
+container, every time. Nothing in either extension can see that happening — the
+platform offers no way to enumerate another extension's webRequest listeners, and
+`management` would want a permission whose warning is worse than the bug.
+
+So it is asked. Each participant answers honestly for itself, and each shows the
+answer in its own settings UI — see the census in
+[`src/lib/census.js`](../src/lib/census.js).
+
+`routing` means one thing and all of these have to be true for it: the watch
+grant is held and the listener is on, a policy is loaded, and nothing has paused
+it. A **dry run** is reported separately rather than folded in, because it
+cancels nothing and so cannot produce a pair — but "this will clash the moment
+you switch it on" is worth seeing before you switch it on.
+
+`routes` publishes host **patterns**, and reduces a regex rule to `rule:<id>`. The
+list is read by a person deciding which of two add-ons to switch off; a page of
+escaped alternations does not help them do that, and shipping one into another
+extension's UI would leak policy detail for no gain.
+
+This is deliberately an **extension of the reply**, not a new message. The
+protocol is frozen at four verbs on purpose, and `cc:ping` is already the
+introspection one — adding fields to what introspection returns keeps the count
+at four and keeps the answer in one place.
+
+Overlap is not set intersection. `*.example.com` and `docs.example.com` never
+compare equal, and **that pair is the bug** — see F8. The comparison treats a
+wildcard as covering both its subdomains and its apex, and reports the match
+under the more specific of the two, because that is the string somebody can
+search their own settings for.
 
 ## Directionality
 

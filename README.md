@@ -121,7 +121,7 @@ per decision is in [docs/adr/](docs/adr/).
 | `scripts/`                | the build, the artwork generators, and the allowlist that keeps this repo employer-neutral |
 | `docs/configuration.md`   | **start here after installing**: where the policy file goes, and what goes in it           |
 | `docs/architecture.md`    | the full design, post-adversarial                                                          |
-| `docs/failure-catalog.md` | six failures observed in production, plus the platform terrain behind them                 |
+| `docs/failure-catalog.md` | eight failures observed in production, plus the platform terrain behind them               |
 | `docs/adr/`               | one file per decision a reviewer would question                                            |
 | `docs/protocol.md`        | the four-message claim protocol                                                            |
 | `docs/publishing.md`      | how a release reaches AMO — and why the policy file never does                             |
@@ -183,6 +183,16 @@ carries a red `!` until both are — hover it and it names whichever is missing:
 
 Neither is a broken install. The badge exists because the state where the
 policy is loaded and the grant is missing used to look like a healthy one.
+
+There is a third thing it warns about, and it is the opposite problem: **another
+extension routing the same hosts.** Firefox hands a request to every add-on that
+asked to hold one, and if two of them cancel it and reopen it, Firefox does both
+— one click, two tabs, same container, both add-ons behaving perfectly. Nothing
+can detect that from the inside, so commander asks: it pings its
+[peers](docs/protocol.md), compares their answer with its own, and names the
+other add-on in the panel. Switch interception off in one of them. That is
+[F8](docs/failure-catalog.md#f8--both-routers-agreed-so-every-link-opened-twice),
+and it hid for weeks precisely because both sides were right.
 
 It makes no network requests of its own, and everything it remembers dies with
 the browser: [PRIVACY.md](PRIVACY.md).

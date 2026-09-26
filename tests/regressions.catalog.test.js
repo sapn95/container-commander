@@ -9,6 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { decide } from '../src/lib/engine.js';
+import { routingState, clashes, clashLine } from '../src/lib/census.js';
 import { situation, insideBrowser, config, rule, WORK, ADMIN } from './helpers/situation.js';
 
 const IDP = 'login.example-idp.com';
@@ -179,6 +180,57 @@ describe('F6 — the federation endpoint that matched every application', () => 
       config: samlRule,
     });
     expect(decide(fromVpnClient)).toMatchObject({ action: 'reopen', cookieStoreId: WORK });
+  });
+});
+
+describe('F8 — both routers agreed, so every link opened twice', () => {
+  // Commander routing `*.example.com` from managed storage while linkward held
+  // its own pins on hosts underneath it, interception on. Two blocking
+  // listeners, one request, both cancel, both reopen — two tabs, every time,
+  // for weeks, with both add-ons reporting themselves healthy.
+  const live = routingState({
+    watching: true,
+    inert: false,
+    paused: false,
+    config: { rules: [{ id: 'corp-wide', match: { host: '*.example.com' } }] },
+  });
+
+  const linkward = {
+    id: 'linkward@sapn95.github.io',
+    name: 'linkward',
+    version: '0.1.0',
+    routing: true,
+    routes: ['docs.example.com', 'code.example.com', 'flow.example.com'],
+  };
+
+  it('names the other add-on and the hosts they both claim', () => {
+    // The pair `*.example.com` / `docs.example.com` never compares equal, and
+    // that pair IS this failure. A set intersection would have reported nothing.
+    const found = clashes(live, [linkward]);
+    expect(found).toHaveLength(1);
+    expect(found[0].name).toBe('linkward');
+    expect(found[0].overlap).toEqual(['docs.example.com', 'code.example.com', 'flow.example.com']);
+    expect(clashLine(found)).toMatch(/two tabs/i);
+  });
+
+  it('stays quiet while only one of the two is routing', () => {
+    // One router is the working state, whichever one it is. A warning that fires
+    // on a peer merely being installed gets clicked past, and then so does this one.
+    expect(clashes(live, [{ ...linkward, routing: false }])).toEqual([]);
+    expect(clashes(routingState({ watching: false }), [linkward])).toEqual([]);
+  });
+
+  it('cannot be fixed by a rule, and does not pretend the engine sees it', () => {
+    // Both policies are correct. Commander's own decision on that host is the
+    // right one in isolation, which is exactly why nothing in the ladder can
+    // detect the second router — it is a fact about the browser, not the request.
+    const d = decide(
+      situation({
+        request: { url: 'https://docs.example.com/x' },
+        config: config({ rules: [rule({ match: { host: '*.example.com' }, to: 'work' })] }),
+      }),
+    );
+    expect(d).toMatchObject({ action: 'reopen', cookieStoreId: WORK });
   });
 });
 
