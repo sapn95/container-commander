@@ -43,6 +43,10 @@ $('reload').addEventListener('click', () => chrome.runtime.reload());
 showClash(await chrome.runtime.sendMessage({ type: 'cc:peers' }).catch(() => null));
 
 function showClash(peers) {
+  // One guard, and it covers the loop below too: clashLine() returns null for an
+  // empty list, so a line to print means `clash` is a non-empty list of entries
+  // clashes() built, each with its own overlap and routes arrays. The only other
+  // reply cc:peers can send is `{clash: [], line: null}`, which stops here.
   if (!peers?.line) return;
   $('clash').hidden = false;
   $('clash-line').textContent = peers.line;
