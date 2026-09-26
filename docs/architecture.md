@@ -432,6 +432,16 @@ instructions to the person reading it. It clears the moment `permissions.onAdded
 re-arms or the next census comes back clean, so a warning never outlives its
 cause; one that does teaches people to ignore warnings.
 
+Pausing suppresses the third state without discarding it. Paused, this extension
+takes no request at all, so a peer that is still routing cannot produce a second
+tab here and a `!` for it would be a warning about a doubling that has stopped.
+The census is kept rather than cleared, because pausing says nothing about what
+the other extension is doing: resuming puts the mark straight back without asking
+again. Two censuses can also be in the air at once — both pages take one when
+they open, and a config change takes one of its own — so each run is numbered and
+only the newest writes the cached answer. A superseded run still answers the page
+that asked it, which is owed what it measured.
+
 Diagnosing the second state before the badge existed meant decoding a Firefox
 profile's session store and permission store off disk by hand, and the answer was
 still a guess. The third took a week of looking for a malfunction that was not
