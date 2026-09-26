@@ -648,6 +648,76 @@ describe('when something else is routing too', () => {
     expect(badgeText(c)).toBe('');
     expect(tooltip(c)).toBe('container commander — move this tab');
   });
+
+  it('takes the mark off while paused, and puts it straight back on resume', async () => {
+    // Paused this extension takes no requests, so nothing opens twice and the
+    // clash is real but inert. Leaving the `!` up would be warning about a
+    // doubling that has stopped, which is the same lesson as a stale warning.
+    const c = await boot();
+    peerRoutes(c, ['example.com']);
+    await census(c);
+    expect(badgeText(c)).toBe('!');
+
+    c.runtime.onMessage.emitSync({ type: 'cc:pause', paused: true }, {}, () => {});
+    expect(badgeText(c)).toBe('');
+    expect(tooltip(c)).not.toMatch(/also routing/i);
+
+    // From the cached answer. Pausing says nothing about what the other
+    // extension is doing, so resuming must not have to go and ask again.
+    c.runtime.onMessage.emitSync({ type: 'cc:pause', paused: false }, {}, () => {});
+    expect(badgeText(c)).toBe('!');
+    expect(tooltip(c)).toMatch(/also routing/i);
+  });
+
+  it('lets the newer of two overlapping censuses win', async () => {
+    // Both pages take a census when they open and a config change takes one of
+    // its own, so two can be in the air at once. They wait on other extensions
+    // and can finish in either order. Without a guard the slower one writes last
+    // and the badge reports a state that has already been superseded.
+    const c = await boot();
+    // Held open rather than delayed, so the order the two runs answer in is the
+    // test's to choose and not the scheduler's.
+    const held = [];
+    c.runtime.sendMessage = vi.fn((id, msg) => {
+      if (msg?.type !== 'cc:ping' || id !== 'linkward@sapn95.github.io') {
+        return Promise.resolve({ ok: true });
+      }
+      return new Promise((resolve) => held.push(resolve));
+    });
+    const answer = (routing) => ({
+      id: 'linkward@sapn95.github.io',
+      name: 'linkward',
+      version: '0.1.0',
+      routing,
+      dryRun: false,
+      routes: ['example.com'],
+    });
+
+    let stale;
+    c.runtime.onMessage.emitSync({ type: 'cc:peers' }, {}, (r) => {
+      stale = r;
+    });
+    await settle(5);
+    let fresh;
+    c.runtime.onMessage.emitSync({ type: 'cc:peers' }, {}, (r) => {
+      fresh = r;
+    });
+    await settle(5);
+    expect(held).toHaveLength(2);
+
+    // The newer run answers first and finds nothing.
+    held[1](answer(false));
+    await settle(5);
+    expect(fresh.clash).toEqual([]);
+    expect(badgeText(c)).toBe('');
+
+    // Then the older one comes back with a clash. It still answers the page that
+    // asked it — that page is owed what it measured — and touches nothing else.
+    held[0](answer(true));
+    await settle(5);
+    expect(stale.clash).toHaveLength(1);
+    expect(badgeText(c)).toBe('');
+  });
 });
 
 describe('pausing', () => {

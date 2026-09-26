@@ -473,8 +473,14 @@ async function refresh() {
 // when somebody installs or configures an extension — which is when a settings
 // page is open, which is when it gets re-asked.
 let clash = [];
+// Two censuses can be in the air at once: both pages take one when they open,
+// and a config change takes one of its own. They wait on other extensions, so
+// they can finish in either order, and without this the slower one writes last
+// and the badge ends up reporting a state that has already been superseded.
+let censusRun = 0;
 
 async function takeCensus() {
+  const run = ++censusRun;
   const self = routingState({ watching, inert: loaded.inert, paused, config: loaded.config });
   // A longer grace than a claim gets. A claim is racing a request this extension
   // is holding open, so 200 ms is a budget; nothing is waiting on this, and a
@@ -483,9 +489,14 @@ async function takeCensus() {
   const answers = await Promise.all(
     PEERS.map((id) => tell(id, { type: 'cc:ping' }, CENSUS_TIMEOUT_MS)),
   );
-  clash = clashes(self, answers);
-  badge();
-  return { self, clash, line: clashLine(clash) };
+  const found = clashes(self, answers);
+  // A superseded run still answers the page that asked it — that page is owed
+  // what it measured — but it does not touch the cached state behind the badge.
+  if (run === censusRun) {
+    clash = found;
+    badge();
+  }
+  return { self, clash: found, line: clashLine(found) };
 }
 
 /**
@@ -504,7 +515,11 @@ async function takeCensus() {
  * webRequest listeners are not enumerable across extensions. See lib/census.js.
  */
 function badge() {
-  const problem = !watching || loaded.inert || clash.length > 0;
+  // A clash counts only while this extension is actually taking requests. Paused
+  // it takes none, so nothing opens twice, and a `!` for a doubling that is not
+  // happening is how people learn to ignore a badge. The answer is kept, not
+  // discarded: resuming brings the mark straight back without asking again.
+  const problem = !watching || loaded.inert || (!paused && clash.length > 0);
   chrome.action?.setBadgeText?.({ text: problem ? '!' : '' }).catch?.(() => {});
   // Red rather than the default grey. A badge you have to squint at to classify
   // is a badge that gets classified as decoration.
@@ -523,7 +538,7 @@ function title() {
   // Separate sentence, not a third item in that list: the two above mean
   // nothing happens, this one means everything happens twice. Reading them as
   // one list would put opposite failures behind the same wording.
-  const line = clashLine(clash);
+  const line = paused ? null : clashLine(clash);
   if (line) return `container commander — ${line}`;
   return 'container commander — move this tab';
 }
@@ -566,6 +581,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   // would be a second, writable source of truth — the disease this extension
   // exists to cure.
   paused = msg.paused === true;
+  // Redrawn, not re-asked. Pausing changes nothing about what the other
+  // extensions are doing, only whether their doing it can produce a second tab
+  // here, so the cached census stays and the icon catches up with it.
+  badge();
   sendResponse({ paused });
   return true;
 });
