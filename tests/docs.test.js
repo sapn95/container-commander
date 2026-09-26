@@ -87,7 +87,7 @@ describe('what the documentation promises', () => {
 describe('the failure catalogue', () => {
   it('carries every failure the regression suite claims to cover', () => {
     const regressions = read('tests/regressions.catalog.test.js');
-    for (const f of ['F1', 'F2', 'F4', 'F6']) {
+    for (const f of ['F1', 'F2', 'F4', 'F6', 'F8']) {
       expect(CATALOG).toContain(`## ${f} `);
       expect(regressions).toContain(f);
     }

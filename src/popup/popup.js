@@ -37,6 +37,36 @@ $('pause').addEventListener('click', async () => {
 
 $('reload').addEventListener('click', () => chrome.runtime.reload());
 
+// Asked here rather than read off the status, because it costs two cross-
+// extension round trips and the background page holds requests open. Opening
+// this page is the moment somebody wants the answer; nothing else pays for it.
+showClash(await chrome.runtime.sendMessage({ type: 'cc:peers' }).catch(() => null));
+
+function showClash(peers) {
+  if (!peers?.line) return;
+  $('clash').hidden = false;
+  $('clash-line').textContent = peers.line;
+  const list = $('clash-list');
+  list.replaceChildren();
+  for (const other of peers.clash) {
+    const li = document.createElement('li');
+    const who = document.createElement('b');
+    who.textContent = [other.name, other.version].filter(Boolean).join(' ');
+    li.append(who);
+    // The overlap, not its whole rule list. What a person needs in order to act
+    // is the hosts BOTH of them claim: those are the tabs arriving in pairs, and
+    // they are what to search for in the other add-on's settings.
+    const shared = other.overlap.length ? other.overlap : other.routes;
+    if (shared.length) {
+      const what = document.createElement('span');
+      what.className = 'url';
+      what.textContent = ` ${other.overlap.length ? 'also routes' : 'routes'} ${shared.join(', ')}`;
+      li.append(what);
+    }
+    list.append(li);
+  }
+}
+
 // Checked after the status, shown above it. Without this grant the extension is
 // structurally unable to decide anything, so it outranks every other thing this
 // page could be telling you — including "no policy installed".

@@ -34,10 +34,20 @@ Nothing.
 Two exceptions, both local and both to software you installed yourself: it can
 exchange short messages with [linkward](https://github.com/sapn95/linkward) and
 [beeline](https://github.com/sapn95/beeline) — the two extensions it cooperates
-with — so that none of them acts on a tab another one has already placed. Those
-messages carry a URL and a container id, they never leave the browser, and the
-recipients are a fixed list of two extension ids that cannot be extended without
-a new release.
+with. They never leave the browser, and the recipients are a fixed list of two
+extension ids that cannot be extended without a new release. A message arriving
+from any other id is ignored without a reply.
+
+There are two kinds, and they carry different things:
+
+|                                                                      |                                                                                                                                                                                                                                                                                 |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **So that two of them never place a tab twice**                      | A URL and a container id, at the moment a tab is placed.                                                                                                                                                                                                                        |
+| **So that the panel can warn you when two of them are both routing** | Whether the other one is currently set to reopen links, and the **host patterns from its rules** — `*.example.com`, not an address you visited. Nothing about a page you opened, and no choice you made, is in it. A rule written as a regular expression is reduced to its id. |
+
+The second one is what produces the "switched on twice" warning, and it is the
+reason the warning can name the other add-on instead of describing a symptom. If
+neither of the two is installed, nothing is sent anywhere.
 
 ## The permissions, and why
 

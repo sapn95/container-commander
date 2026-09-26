@@ -277,9 +277,19 @@ describe('carrying out a decision', () => {
     await c.tabs.onCreated.emit({ id: 7, url: 'https://example.com/doc' });
     await request(c);
     await settle(20);
-    const [target, msg] = c.runtime.sendMessage.mock.calls[0];
-    expect(target).toBe('linkward@sapn95.github.io');
-    expect(msg.type).toBe('cc:claim');
+    // Found by type, not by call index. Arming also takes a peer census, so the
+    // claim is no longer the first message this extension ever sends — and
+    // "first message overall" was never what this test meant. What matters is
+    // that the claim went to linkward and went out BEFORE the tab was created,
+    // which is what the ordering assertion below actually checks.
+    const claim = c.runtime.sendMessage.mock.calls.find(([, m]) => m.type === 'cc:claim');
+    expect(claim).toBeDefined();
+    expect(claim[0]).toBe('linkward@sapn95.github.io');
+    expect(
+      c.runtime.sendMessage.mock.invocationCallOrder[
+        c.runtime.sendMessage.mock.calls.indexOf(claim)
+      ],
+    ).toBeLessThan(c.tabs.create.mock.invocationCallOrder[0]);
   });
 
   it('releases the claim when the tab could not be created', async () => {
@@ -499,6 +509,144 @@ describe('when it is not allowed to watch', () => {
   it('says nothing at all when both are in order', async () => {
     const c = await boot();
     expect(badgeText(c)).toBe('');
+  });
+});
+
+describe('when something else is routing too', () => {
+  // The mirror image of the block above, and it ran undetected for weeks.
+  // commander routed `*.example.com`; linkward held its own `docs.example.com` rule
+  // with interception on. Both hold a blocking webRequest listener, both cancel
+  // the same request, both open a replacement — and Firefox carries out both.
+  // Every bookmark on those hosts opened in a pair, with both extensions
+  // reporting themselves perfectly healthy, because neither can enumerate the
+  // other's listeners.
+
+  const badgeText = (c) => c.action.setBadgeText.mock.calls.at(-1)[0].text;
+  const tooltip = (c) => c.action.setTitle.mock.calls.at(-1)[0].title;
+
+  /** A peer that answers cc:ping the way a live router does. */
+  function peerRoutes(c, routes, over = {}) {
+    c.runtime.sendMessage = vi.fn(async (id, msg) => {
+      if (msg?.type !== 'cc:ping') return { ok: true };
+      if (id !== 'linkward@sapn95.github.io') return { ok: true };
+      return {
+        id,
+        name: 'linkward',
+        version: '0.1.0',
+        routing: true,
+        dryRun: false,
+        routes,
+        ...over,
+      };
+    });
+  }
+
+  /** What the GUI asks for when a page opens. */
+  async function census(c) {
+    let answer;
+    c.runtime.onMessage.emitSync({ type: 'cc:peers' }, {}, (r) => {
+      answer = r;
+    });
+    await settle(20);
+    return answer;
+  }
+
+  it('tells a peer what it is doing, not merely that it exists', async () => {
+    // A peer has no other way to get this: webRequest listeners are not
+    // enumerable across extensions, and `management` would want a permission
+    // whose warning is worse than the bug.
+    const c = await boot();
+    const reply = vi.fn();
+    c.runtime.onMessageExternal.emitSync(
+      { type: 'cc:ping' },
+      { id: 'linkward@sapn95.github.io' },
+      reply,
+    );
+    expect(reply).toHaveBeenCalledWith(
+      expect.objectContaining({ routing: true, routes: ['example.com'] }),
+    );
+  });
+
+  it('answers a ping with routing false when it cannot watch', async () => {
+    const c = await boot({ granted: false });
+    const reply = vi.fn();
+    c.runtime.onMessageExternal.emitSync(
+      { type: 'cc:ping' },
+      { id: 'linkward@sapn95.github.io' },
+      reply,
+    );
+    expect(reply).toHaveBeenCalledWith(expect.objectContaining({ routing: false, routes: [] }));
+  });
+
+  it('finds the peer that routes the same host and says what it means', async () => {
+    const c = await boot();
+    peerRoutes(c, ['example.com', 'elsewhere.example']);
+    const answer = await census(c);
+    expect(answer.clash).toHaveLength(1);
+    expect(answer.clash[0].overlap).toEqual(['example.com']);
+    expect(answer.line).toMatch(/two tabs/);
+  });
+
+  it('marks the icon, because the rules on screen are right and the browser is not', async () => {
+    const c = await boot();
+    expect(badgeText(c)).toBe('');
+    peerRoutes(c, ['example.com']);
+    await census(c);
+    expect(badgeText(c)).toBe('!');
+    expect(tooltip(c)).toMatch(/also routing/i);
+  });
+
+  it('keeps the two kinds of failure in separate sentences', async () => {
+    // "Nothing is being decided" and "everything is decided twice" are opposite
+    // states. Reading them off one list would put them behind the same wording.
+    const c = await boot({ granted: false });
+    peerRoutes(c, ['example.com']);
+    await census(c);
+    expect(tooltip(c)).toMatch(/Nothing is being decided/);
+    expect(tooltip(c)).not.toMatch(/also routing/i);
+  });
+
+  it('says nothing when the peer is installed but not intercepting', async () => {
+    const c = await boot();
+    peerRoutes(c, ['example.com'], { routing: false });
+    const answer = await census(c);
+    expect(answer.clash).toEqual([]);
+    expect(answer.line).toBeNull();
+    expect(badgeText(c)).toBe('');
+  });
+
+  it('says nothing when no peer answers at all', async () => {
+    // Absence is the normal case. Every one of these extensions has to work
+    // with the other two uninstalled.
+    const c = await boot();
+    c.runtime.sendMessage = vi.fn(async () => {
+      throw new Error('Could not establish connection');
+    });
+    const answer = await census(c);
+    expect(answer.clash).toEqual([]);
+    expect(badgeText(c)).toBe('');
+  });
+
+  it('takes a census on its own at arming, before anybody opens a page', async () => {
+    // The point of the badge is that it is already right when you look at it.
+    const c = await boot();
+    const asked = c.runtime.sendMessage.mock.calls.filter(([, m]) => m?.type === 'cc:ping');
+    expect(asked.map(([id]) => id)).toEqual([
+      'linkward@sapn95.github.io',
+      'beeline@sapn95.github.io',
+    ]);
+  });
+
+  it('clears the mark once the other one is switched off', async () => {
+    // A warning that outlives its cause teaches people to ignore warnings.
+    const c = await boot();
+    peerRoutes(c, ['example.com']);
+    await census(c);
+    expect(badgeText(c)).toBe('!');
+    peerRoutes(c, ['example.com'], { routing: false });
+    await census(c);
+    expect(badgeText(c)).toBe('');
+    expect(tooltip(c)).toBe('container commander — move this tab');
   });
 });
 
