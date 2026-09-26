@@ -179,6 +179,22 @@ describe('finding the extensions that are also routing', () => {
     expect(anon.id).toBe('');
   });
 
+  it('does not report a blank or a non-string as the extension to go and switch off', () => {
+    // An empty name passed the old string check and came out as nothing at all,
+    // and an id that is not a string came out as whatever String() makes of it.
+    // The tooltip has to name something somebody can find in their add-ons list.
+    const [blank] = clashes(SELF, [
+      { name: '   ', id: 'linkward@sapn95.github.io', routing: true },
+    ]);
+    expect(blank.name).toBe('linkward@sapn95.github.io');
+
+    for (const bad of [{ id: 42 }, { id: {} }, { id: '' }, { name: '', id: null }]) {
+      const [found] = clashes(SELF, [{ ...bad, routing: true }]);
+      expect(found.name).toBe('another extension');
+      expect(found.id).toBe('');
+    }
+  });
+
   it('compares against an empty route list of its own without throwing', () => {
     // routingState() can report routing with no host rules at all: a policy of
     // nothing but regex rules publishes ids, and `routes` can legitimately be [].
