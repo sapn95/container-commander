@@ -1,7 +1,7 @@
 // Status, and the two affordances that make managed storage honest.
 
 import { hasWatchPermissions, requestWatchPermissions } from '../lib/permissions.js';
-import { standDownHosts } from '../lib/census.js';
+import { standDownHosts, allStandingDown } from '../lib/census.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -68,6 +68,18 @@ function showClash(peers) {
   // clashes() built, each with its own overlap and routes arrays. The only other
   // reply cc:peers can send is `{clash: [], line: null}`, which stops here.
   if (!peers?.line) return;
+  const settled = allStandingDown(peers.clash);
+  // Not an alarm once the other add-on has given way. The block still says who
+  // else is routing and what is left over, because something IS left over — a
+  // host reopened from a bookmark folder matched no rule and is on no published
+  // list — but red edges and a heading in the alert colour are for a browser
+  // opening two tabs, and it is not doing that any more.
+  $('clash').classList.toggle('state', !settled);
+  $('clash').classList.toggle('settled', settled);
+  document.querySelector('#clash h2').textContent = settled
+    ? 'linkward is giving way to this add-on'
+    : 'Two add-ons are routing this browser';
+  $('clash-standdown').classList.toggle('primary', !settled);
   $('clash').hidden = false;
   $('clash-line').textContent = peers.line;
   wireStandDown(peers.clash);

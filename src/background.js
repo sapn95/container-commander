@@ -7,7 +7,7 @@
 
 import { decide, RUNG } from './lib/engine.js';
 import { createClaims } from './lib/claims.js';
-import { clashes, clashLine, routingState } from './lib/census.js';
+import { clashes, clashLine, routingState, allStandingDown } from './lib/census.js';
 import { loadConfig } from './lib/config.js';
 import { isCandidateTab } from './lib/candidates.js';
 import { noteFocusChange, readFocusState, seedFocusState } from './lib/focus.js';
@@ -481,7 +481,13 @@ let censusRun = 0;
 
 async function takeCensus() {
   const run = ++censusRun;
-  const self = routingState({ watching, inert: loaded.inert, paused, config: loaded.config });
+  // The id goes in because clashes() needs it: a peer says which extensions it
+  // is giving way to, and without knowing its own id this one cannot tell being
+  // given way to from watching somebody give way to a third add-on.
+  const self = {
+    id: chrome.runtime.id,
+    ...routingState({ watching, inert: loaded.inert, paused, config: loaded.config }),
+  };
   // A longer grace than a claim gets. A claim is racing a request this extension
   // is holding open, so 200 ms is a budget; nothing is waiting on this, and a
   // peer's event page may be asleep and need waking. Too short here does not
@@ -519,7 +525,16 @@ function badge() {
   // it takes none, so nothing opens twice, and a `!` for a doubling that is not
   // happening is how people learn to ignore a badge. The answer is kept, not
   // discarded: resuming brings the mark straight back without asking again.
-  const problem = !watching || loaded.inert || (!paused && clash.length > 0);
+  // A peer that has given way is not a doubling. It says so in its own ping
+  // reply, it releases the hosts this policy publishes, and marking the toolbar
+  // for it would be a `!` about a pair that is no longer happening — which is
+  // exactly how a badge stops being read.
+  //
+  // Left inside the short circuit rather than computed above it. badge() runs
+  // during module evaluation, before `clash` is initialised, and the `!watching`
+  // arm is what keeps it from being read there at all.
+  const problem =
+    !watching || loaded.inert || (!paused && clash.length > 0 && !allStandingDown(clash));
   chrome.action?.setBadgeText?.({ text: problem ? '!' : '' }).catch?.(() => {});
   // Red rather than the default grey. A badge you have to squint at to classify
   // is a badge that gets classified as decoration.
@@ -538,7 +553,10 @@ function title() {
   // Separate sentence, not a third item in that list: the two above mean
   // nothing happens, this one means everything happens twice. Reading them as
   // one list would put opposite failures behind the same wording.
-  const line = paused ? null : clashLine(clash);
+  // The tooltip follows the badge: a state that does not earn a mark does not
+  // earn a sentence on hover either. The arrangement is still on both settings
+  // pages for anybody who goes looking.
+  const line = paused || allStandingDown(clash) ? null : clashLine(clash);
   if (line) return `container commander — ${line}`;
   return 'container commander — move this tab';
 }

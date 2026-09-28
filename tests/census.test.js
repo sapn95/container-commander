@@ -18,6 +18,7 @@ import {
   clashes,
   clashLine,
   standDownHosts,
+  allStandingDown,
 } from '../src/lib/census.js';
 
 const SELF = { routing: true, routes: ['*.example.com'] };
@@ -346,5 +347,76 @@ describe('what a regex rule publishes', () => {
         ],
       }),
     ).toEqual(['*.example.com', 'login.example.net']);
+  });
+});
+
+// The warning survived its own remedy. linkward gives way on every host this
+// policy publishes, and the popup went on saying "switch routing off in one of
+// them" — asking for a fix that had already happened, which is how a warning
+// stops being read the next time it is right.
+describe('a peer that has given way', () => {
+  const SELF = { id: 'me@example.com', routing: true, routes: ['*.example.com'] };
+  const GAVE_WAY = {
+    id: 'linkward@example.com',
+    name: 'linkward',
+    version: '0.8.0',
+    routing: true,
+    routes: [],
+    defersTo: ['me@example.com'],
+  };
+
+  it('is marked, not dropped: it still holds the same requests', () => {
+    // A host this policy reopens from a bookmark folder matched no rule, so it
+    // is on no published list and the peer never stood down on it.
+    const [found] = clashes(SELF, [GAVE_WAY]);
+    expect(found.standingDown).toBe(true);
+    expect(found.name).toBe('linkward');
+  });
+
+  it('is not marked when it names somebody else', () => {
+    const [found] = clashes(SELF, [{ ...GAVE_WAY, defersTo: ['third@example.com'] }]);
+    expect(found.standingDown).toBe(false);
+  });
+
+  it('is not marked when this extension does not know its own id', () => {
+    // Guessing would quiet a warning that is still entirely true.
+    const [found] = clashes({ ...SELF, id: undefined }, [GAVE_WAY]);
+    expect(found.standingDown).toBe(false);
+    expect(clashes({ ...SELF, id: '' }, [GAVE_WAY])[0].standingDown).toBe(false);
+  });
+
+  it('sorts below a peer that is still fighting, whatever either overlaps', () => {
+    // The first entry is the one the one-line warning names, so this ordering
+    // decides whether that line is an alarm or a statement.
+    const fighting = {
+      id: 'other@example.com',
+      name: 'other',
+      routing: true,
+      routes: ['unrelated.example.net'],
+    };
+    const [first, second] = clashes(SELF, [GAVE_WAY, fighting]);
+    expect(first.name).toBe('other');
+    expect(second.name).toBe('linkward');
+  });
+
+  it('stops the sentence asking for a fix that already happened', () => {
+    const line = clashLine(clashes(SELF, [GAVE_WAY]));
+    expect(line).toMatch(/gives way/i);
+    expect(line).not.toMatch(/switch routing off/i);
+    // And still says what is left, because something is.
+    expect(line).toMatch(/bookmark folder/i);
+    expect(line).toMatch(/can still open twice/i);
+  });
+
+  it('keeps the alarm while any of them is still routing against it', () => {
+    const fighting = { id: 'o@example.com', name: 'other', routing: true, routes: [] };
+    const line = clashLine(clashes(SELF, [GAVE_WAY, fighting]));
+    expect(line).toMatch(/switch routing off/i);
+  });
+
+  it('answers whether the whole census has given way', () => {
+    expect(allStandingDown(clashes(SELF, [GAVE_WAY]))).toBe(true);
+    expect(allStandingDown([])).toBe(false);
+    expect(allStandingDown()).toBe(false);
   });
 });

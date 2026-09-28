@@ -120,9 +120,21 @@ function anchoredHost(regex) {
  * becomes the warning everybody clicks past, and the one time it is real it
  * gets clicked past too.
  *
- * @param {{routing?: boolean}} self         this extension's own routingState()
+ * A peer that answers `defersTo` naming THIS extension is marked rather than
+ * dropped. It is still holding the same requests, and it releases only the hosts
+ * published here — a host this policy acts on without a rule, from a bookmark
+ * folder hint, is on no published list and can still open twice. So it stays in
+ * the census and stops being an alarm, which is the honest middle: the thing
+ * that was wrong has been handled, and the part that has not been is small and
+ * worth a sentence.
+ *
+ * `self.id` is required for that and deliberately not defaulted. Without it no
+ * peer can be confirmed to be giving way to THIS extension rather than to some
+ * third one, and guessing would quiet a warning that is still entirely true.
+ *
+ * @param {{routing?: boolean, id?: string}} self  this extension's own routingState()
  * @param {Array<object|null>} answers       one cc:ping reply per peer, nulls allowed
- * @returns {Array<{id, name, version, routes, overlap}>} worst overlap first
+ * @returns {Array<{id, name, version, routes, overlap, standingDown}>} loudest first
  */
 export function clashes(self, answers = []) {
   if (self?.routing !== true) return [];
@@ -144,11 +156,21 @@ export function clashes(self, answers = []) {
       version: typeof a.version === 'string' ? a.version : '',
       routes,
       overlap: overlapping(self.routes ?? [], routes),
+      standingDown:
+        typeof self.id === 'string' &&
+        self.id !== '' &&
+        Array.isArray(a.defersTo) &&
+        a.defersTo.includes(self.id),
     });
   }
-  // The one with the most shared hosts is the one doing the most damage, and it
-  // is the one whose name belongs in a one-line warning.
-  return found.sort((a, b) => b.overlap.length - a.overlap.length);
+  // A peer still fighting outranks one that has given way, whatever either of
+  // them overlaps on; below that, the most shared hosts is the most damage. The
+  // first entry is the one whose name goes in the one-line warning, so this
+  // ordering is what decides whether that line is an alarm or a statement.
+  return found.sort(
+    (a, b) =>
+      Number(a.standingDown) - Number(b.standingDown) || b.overlap.length - a.overlap.length,
+  );
 }
 
 /** A field from a peer, if it is a string with something in it. Otherwise ''. */
@@ -238,6 +260,16 @@ export function clashLine(found = []) {
   const first = found[0];
   const who = [first.name, first.version].filter(Boolean).join(' ');
   const rest = found.length > 1 ? ` (and ${found.length - 1} more)` : '';
+  // Every one of them has given way. Telling somebody to go and switch an
+  // add-on off at this point is asking for a fix that has already happened, and
+  // a warning that survives its own remedy is one nobody reads the next time.
+  if (found.every((p) => p.standingDown)) {
+    return (
+      `${who}${rest} is also routing navigation, and gives way on the hosts this policy` +
+      ' publishes — those open once. A host reopened here without a rule, from a bookmark' +
+      ' folder, is on no published list and can still open twice.'
+    );
+  }
   const where = first.overlap.length
     ? ` Both route ${first.overlap.slice(0, 3).join(', ')}${first.overlap.length > 3 ? ', …' : ''}.`
     : '';
@@ -246,4 +278,9 @@ export function clashLine(found = []) {
     ' Two extensions that both reopen a request open two tabs for it.' +
     ' Switch routing off in one of them.'
   );
+}
+
+/** Has every peer in the census given way to this extension? */
+export function allStandingDown(found = []) {
+  return found.length > 0 && found.every((p) => p?.standingDown === true);
 }

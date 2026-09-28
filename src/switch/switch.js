@@ -15,6 +15,7 @@
 // confirm it would be the confirm-page dialog rebuilt out of our own parts.
 
 import { hasWatchPermissions, requestWatchPermissions } from '../lib/permissions.js';
+import { allStandingDown } from '../lib/census.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -38,6 +39,10 @@ chrome.runtime
   .sendMessage({ type: 'cc:peers' })
   .then((peers) => {
     if (!peers?.line) return;
+    // Same rule as the popup: a peer that has given way is not an alarm.
+    const settled = allStandingDown(peers.clash);
+    $('clash').classList.toggle('state', !settled);
+    $('clash-standdown').classList.toggle('primary', !settled);
     $('clash-line').textContent = peers.line;
     $('clash').hidden = false;
     $('clash-standdown').addEventListener('click', standDown);
