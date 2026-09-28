@@ -380,13 +380,20 @@ code {
    Every other button on this page is an outline, which is right when they are
    alternatives to one another — the container list, Reload, Pause. A state
    block is not a list of alternatives: it is one recommended action with its
-   consequences written underneath, so it gets the page's only filled button. */
+   consequences written underneath, so it gets the page's only filled button.
+
+   Filled with the ACCENT and not with the state colour. The state colour is the
+   edge and the heading, which is where the block says what is wrong; a red
+   button under a red heading inside a red-edged tinted box is the ransom note
+   the pattern was shaped to avoid, and it also says "danger" about the one
+   thing on screen that is safe to press. Blue means "you can press this"
+   everywhere else in this extension and it goes on meaning it here. */
 
 button.primary {
   justify-content: center;
-  border-color: var(--state, var(--accent));
-  background: var(--state, var(--accent));
-  color: var(--bg);
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
   font-weight: 600;
   text-align: center;
 }
@@ -404,6 +411,18 @@ button.primary:disabled {
 
 .state .choices {
   margin-bottom: 4px;
+}
+
+/* The peer's hosts, inline. `.url` is shaped for a path standing on its own
+   line, and its border and padding turn a phrase inside a sentence into
+   something that looks like a disabled text field. Here it is the end of a
+   sentence about another add-on, so it keeps the monospace and drops the box. */
+#clash-list .url {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
 }
 
 /* The durable fix, folded away. A stand-down that lasts until Firefox restarts
