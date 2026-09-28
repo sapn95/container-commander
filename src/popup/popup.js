@@ -37,6 +37,10 @@ let paused = status?.paused === true;
 function showPaused(next) {
   paused = next === true;
   $('pause').textContent = paused ? 'Resume' : 'Pause for this session';
+  // The clash block offers the same stop under another name, so it follows the
+  // same state. Resuming from Policy below used to leave it reading "Routing
+  // stopped here", disabled, over a browser that had started routing again.
+  if (!$('clash').hidden) showStandDown();
 }
 
 async function setPaused(next) {
@@ -110,13 +114,13 @@ function wireStandDown(clash) {
       '// Pause above, or switch its interception off.';
   wireCopyButtons();
 
-  if (paused) return standingDown(button);
+  showStandDown();
 
   button.addEventListener('click', async () => {
     button.disabled = true;
-    if (await setPaused(true)) return standingDown(button);
-    // Nothing was paused, so the button goes back to offering it. Leaving it
-    // disabled would read as done.
+    // setPaused reports the new state, and showPaused redraws this block from
+    // it — so the success path needs nothing here. Only the failure does.
+    if (await setPaused(true)) return;
     button.disabled = false;
     $('clash-standdown-note').textContent =
       'The background page did not answer, so nothing was paused. Try again, or use Pause under ' +
@@ -124,13 +128,23 @@ function wireStandDown(clash) {
   });
 }
 
-/** The same action, named in the past tense. */
-function standingDown(button) {
-  button.disabled = true;
-  button.textContent = 'Routing stopped here';
-  $('clash-standdown-note').textContent =
-    'Paused until Firefox restarts, so the other add-on has these tabs to itself. Resume is under ' +
-    'Policy below. To make it last, see the policy edit above.';
+/**
+ * Draw the stand-down from whatever the pause state now is.
+ *
+ * One function for both directions, because the two used to be written
+ * separately and the resume half was simply missing: Pause under Policy would
+ * start routing again while this block still read "Routing stopped here".
+ */
+function showStandDown() {
+  const button = $('clash-standdown');
+  button.disabled = paused;
+  button.textContent = paused ? 'Routing stopped here' : 'Stop routing here';
+  $('clash-standdown-note').textContent = paused
+    ? 'Paused until Firefox restarts, so the other add-on has these tabs to itself. Resume is ' +
+      'under Policy below. To make it last, see the policy edit above.'
+    : 'Pauses container commander until Firefox restarts, so the other add-on keeps the tabs to ' +
+      'itself. To decide it the other way round, switch interception off in that add-on instead — ' +
+      'nothing here can do it for you.';
 }
 
 // Checked after the status, shown above it. Without this grant the extension is

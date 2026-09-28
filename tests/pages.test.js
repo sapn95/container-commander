@@ -351,6 +351,34 @@ describe('the popup', () => {
     expect($('clash-standdown-note').textContent).toMatch(/nothing was paused/i);
   });
 
+  it('offers the stand-down again when routing is resumed from Policy', async () => {
+    // Found in review. The two directions were written separately and the way
+    // back was missing, so Resume below started routing again while this block
+    // still read "Routing stopped here", disabled, over a browser that was.
+    await mountPopup(loaded, CLASH);
+    $('clash-standdown').click();
+    await settle();
+    expect($('clash-standdown').disabled).toBe(true);
+
+    $('pause').click();
+    await settle();
+    expect($('pause').textContent).toBe('Pause for this session');
+    expect($('clash-standdown').disabled).toBe(false);
+    expect($('clash-standdown').textContent).toBe('Stop routing here');
+    expect($('clash-standdown-note').textContent).toMatch(/Pauses container commander/);
+  });
+
+  it('does not claim the links are opening twice, because they may not be', async () => {
+    // A routing peer is reported whether or not anything overlaps — linkward
+    // with no rules still redirects to its picker — and since linkward began
+    // standing down on the shared hosts, an empty overlap is the ordinary case.
+    // A heading that named the symptom was wrong exactly when the fix worked.
+    await mountPopup(loaded, CLASH);
+    const heading = document.querySelector('#clash h2').textContent;
+    expect(heading).toMatch(/routing/i);
+    expect(heading).not.toMatch(/twice/i);
+  });
+
   it('opens already standing down when the session is paused', async () => {
     await mountPopup({ ...loaded, paused: true }, CLASH);
     expect($('clash-standdown').disabled).toBe(true);
