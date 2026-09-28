@@ -50,23 +50,25 @@ body.panel .note {
   font-size: 11px;
 }
 
-#warn,
-#clash {
+/* The two state strips. pick.css gives them their left edge and colour; this
+ * narrows the padding to a 260px panel and drops the bottom hairline the strips
+ * used to carry — an edge on two sides made them read as a box, which is the
+ * one thing the pattern is shaped to avoid. */
+body.panel .state {
   margin: 0 0 14px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border);
+  padding: 10px 12px;
 }
 
-#warn .lead,
-#clash .lead {
-  margin: 0 0 8px;
+body.panel .state .lead {
+  margin: 0 0 10px;
+  font-size: 12px;
 }
 
-#clash .note {
-  margin: 0;
+body.panel .state .note {
+  margin: 8px 0 0;
 }
 
-#warn button {
+body.panel .state button {
   padding: 7px 10px;
   font-size: 12px;
 }
