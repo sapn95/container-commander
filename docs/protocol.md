@@ -122,6 +122,24 @@ list is read by a person deciding which of two add-ons to switch off; a page of
 escaped alternations does not help them do that, and shipping one into another
 extension's UI would leak policy detail for no gain.
 
+**A peer may act on this reply, not merely display it.** linkward releases a
+request untouched when a peer that answered `routing: true` published a pattern
+covering its host, which ends the pair on those hosts without anybody pressing
+anything. Three consequences for anyone answering a ping:
+
+- Answering `routing: true` while cancelling nothing is the expensive lie. A peer
+  that stands down for it leaves the link to an extension that has already stood
+  down, and the tab opens in no container at all — the same failure as the pair,
+  and quieter. This is why a dry run reports `routing: false`, and why `paused`
+  and the missing watch grant are both folded into that one word.
+- A host in `routes` is a claim that this extension acts on it. commander's list
+  comes from the policy's rules, so a host it reopens from a bookmark-folder hint
+  with **no rule matched** appears in no route list — a peer still asks about
+  those, and the warning is right to stay up.
+- Silence is read as "not routing", by the warning and by the stand-down alike.
+  Both listeners are registered synchronously so a sleeping event page can be
+  started for the ping, which is what makes that reading safe.
+
 This is deliberately an **extension of the reply**, not a new message. The
 protocol is frozen at four verbs on purpose, and `cc:ping` is already the
 introspection one — adding fields to what introspection returns keeps the count
