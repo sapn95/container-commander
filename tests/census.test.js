@@ -69,18 +69,19 @@ describe('what this extension reports about itself', () => {
 });
 
 describe('the routes it publishes', () => {
-  it('names hosts and reduces a regex rule to its id', () => {
-    // A page of escaped alternations does not help the person deciding which
-    // add-on to switch off, and shipping one into another extension's UI would
-    // leak policy detail for nothing.
+  it('names hosts, and a regex rule by the host it is anchored to', () => {
+    // The PATTERN is still never published — a page of escaped alternations
+    // helps nobody and leaks policy detail for nothing. The host it lands on is
+    // a different thing, and it is the only part a peer can act on: an id it
+    // cannot match leaves it asking about a host this extension is routing.
     expect(
       routeHosts({
         rules: [
           { id: 'corp-wide', match: { host: '*.example.com' } },
-          { id: 'msal-terminal', match: { regex: '^https://login\\.microsoftonline\\.com/x' } },
+          { id: 'msal-terminal', match: { regex: '^https://login\\.example-idp\\.com/x' } },
         ],
       }),
-    ).toEqual(['*.example.com', 'rule:msal-terminal']);
+    ).toEqual(['*.example.com', 'login.example-idp.com']);
   });
 
   it('skips a rule that names neither a host nor an id', () => {
@@ -300,5 +301,50 @@ describe('the hosts to hand over when this extension stands down', () => {
     // Everything here crossed an extension boundary this one does not control.
     expect(standDownHosts()).toEqual([]);
     expect(standDownHosts([null, {}, { overlap: [42, '', '   '] }])).toEqual([]);
+  });
+});
+
+// Found by running the real installed policy through both extensions instead of
+// reasoning about it: three of its twelve rules published as `rule:<id>`, all
+// three `scope: external`, all three anchored to one host. A peer cannot match
+// an id, so it kept asking about hosts this extension was routing — the pair,
+// on precisely the sign-in hand-offs a regex rule gets written for.
+describe('what a regex rule publishes', () => {
+  const pub = (regex, id = 'r') => routeHosts({ rules: [{ id, match: { regex } }] });
+
+  it('publishes the host when the pattern is anchored to exactly one', () => {
+    expect(pub('^https://login\\.example\\.com/oauth2/')).toEqual(['login.example.com']);
+  });
+
+  it('accepts the optional-s scheme and drops a port', () => {
+    // A peer matches on host alone, so a port left on would match nothing.
+    expect(pub('^https?://127\\.0\\.0\\.1:35001/callback')).toEqual(['127.0.0.1']);
+  });
+
+  it('keeps the id when the pattern could match more than one host', () => {
+    // Publishing one half of an alternation would have a peer stand down on
+    // that host and go on doubling the other, which is worse than not helping.
+    expect(pub('^https://(a|b)\\.example\\.com/', 'alt')).toEqual(['rule:alt']);
+    expect(pub('^https://.*\\.example\\.com/', 'any')).toEqual(['rule:any']);
+    expect(pub('^https://[ab]\\.example\\.com/', 'cls')).toEqual(['rule:cls']);
+    expect(pub('^https://a?\\.example\\.com/', 'opt')).toEqual(['rule:opt']);
+  });
+
+  it('keeps the id when the pattern is not anchored at all', () => {
+    // Unanchored, it can match the host anywhere in the URL — including inside
+    // a query string on a completely different site.
+    expect(pub('https://example\\.com/', 'loose')).toEqual(['rule:loose']);
+  });
+
+  it('still publishes a plain host rule as itself, and dedupes', () => {
+    expect(
+      routeHosts({
+        rules: [
+          { id: 'a', match: { host: '*.example.com' } },
+          { id: 'b', match: { regex: '^https://login\\.example\\.net/x' } },
+          { id: 'c', match: { regex: '^https://login\\.example\\.net/y' } },
+        ],
+      }),
+    ).toEqual(['*.example.com', 'login.example.net']);
   });
 });

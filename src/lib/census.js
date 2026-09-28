@@ -64,11 +64,52 @@ export function routeHosts(config) {
   for (const rule of config?.rules ?? []) {
     const host = rule?.match?.host;
     if (typeof host === 'string' && host) out.push(host);
-    else if (rule?.id) out.push(`rule:${rule.id}`);
+    else if (typeof rule?.match?.regex === 'string' && anchoredHost(rule.match.regex)) {
+      out.push(anchoredHost(rule.match.regex));
+    } else if (rule?.id) out.push(`rule:${rule.id}`);
   }
   // Deduplicated: two rules on one host with different paths are one host to
   // the person reading this.
   return [...new Set(out)];
+}
+
+/**
+ * The host a regex rule is anchored to, if it is anchored to exactly one.
+ *
+ * A peer READS this list to decide whether to stand down, so an entry it cannot
+ * match is an entry that does nothing. `rule:<id>` is a label: it names the rule
+ * for a person comparing two settings pages, and it makes a peer keep asking
+ * about a host this extension is routing — which is the pair, on precisely the
+ * sign-in hand-offs a regex rule tends to be written for. Found by running the
+ * real policy through both extensions: three of its twelve rules published as
+ * ids, all three `scope: external`, all three anchored to one host.
+ *
+ * What is published is the HOST and never the pattern. The reason for the id in
+ * the first place still holds — a page of escaped alternations helps nobody, and
+ * shipping one into another extension's UI leaks policy detail for no gain — but
+ * the host an external sign-in lands on is not the secret part of a policy.
+ *
+ * Conservative by construction. It reads `^`, a scheme, then a run of literal
+ * host characters, and gives up the moment it meets anything that could widen or
+ * narrow what follows: an alternation, a class, a quantifier, a group. A regex
+ * matching two hosts must not be published as one of them, because a peer would
+ * then stand down on the one host and keep doubling on the other.
+ *
+ * @param {string} regex  the rule's `match.regex`
+ * @returns {string} the host, or '' when it is not a single anchored one
+ */
+function anchoredHost(regex) {
+  // `^https://` or `^https?://`, with the optional marker on the s only.
+  const m = /^\^https(\?)?:\/\/([^/]*)/.exec(regex);
+  if (!m) return '';
+  // A port is not part of a host pattern, and a peer matches on host alone.
+  const authority = m[2].replace(/:\d+$/, '');
+  // Every character has to be a literal, or an escaped dot. Anything else —
+  // ( ) [ ] { } | + * ? . $ — means the host is not the fixed thing it looks
+  // like, and guessing which half of it to publish is how a rule that covers
+  // two hosts silently stops covering one.
+  if (!/^(?:[A-Za-z0-9-]|\\\.)+$/.test(authority)) return '';
+  return authority.replace(/\\\./g, '.').toLowerCase();
 }
 
 /**
