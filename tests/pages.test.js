@@ -368,6 +368,31 @@ describe('the popup', () => {
     expect($('clash-standdown-note').textContent).toMatch(/Pauses container commander/);
   });
 
+  it('drops the alarm once the other add-on has given way', async () => {
+    // The whole point of the hand-over, and it was invisible: linkward released
+    // every host this policy publishes and the popup went on demanding that
+    // somebody switch one of the two off.
+    await mountPopup(loaded, {
+      clash: [{ ...CLASH.clash[0], overlap: [], standingDown: true }],
+      line: 'linkward 0.8.0 is also routing navigation, and gives way on the hosts this policy publishes.',
+    });
+    const box = $('clash');
+    expect(box.hidden).toBe(false);
+    expect(box.classList.contains('state')).toBe(false);
+    expect(box.classList.contains('settled')).toBe(true);
+    expect(document.querySelector('#clash h2').textContent).toMatch(/giving way/i);
+    // The stop is still offered, just not as the thing to do.
+    expect($('clash-standdown').classList.contains('primary')).toBe(false);
+  });
+
+  it('keeps the alarm while the other add-on is still routing against it', async () => {
+    await mountPopup(loaded, CLASH);
+    const box = $('clash');
+    expect(box.classList.contains('state')).toBe(true);
+    expect(box.classList.contains('settled')).toBe(false);
+    expect($('clash-standdown').classList.contains('primary')).toBe(true);
+  });
+
   it('does not claim the links are opening twice, because they may not be', async () => {
     // A routing peer is reported whether or not anything overlaps — linkward
     // with no rules still redirects to its picker — and since linkward began

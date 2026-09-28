@@ -459,3 +459,60 @@ button.primary:disabled {
     transition: filter 120ms ease-out;
   }
 }
+
+/* The same block once the other add-on has given way. It keeps the shape — the
+   left edge still marks it as a statement about the browser rather than about
+   this policy — and drops every part that says something is wrong: the alert
+   colour, the tint, the heading weight. What is left is a fact worth having on
+   the page and nothing worth acting on. */
+.settled {
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 0;
+  border-left: 3px solid var(--border);
+  border-radius: 0 8px 8px 0;
+  background: transparent;
+}
+
+.settled h2 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.settled .lead {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.settled .note {
+  margin-top: 12px;
+}
+
+.settled .choices {
+  margin-bottom: 4px;
+}
+
+.settled details {
+  margin-top: 14px;
+  font-size: 13px;
+}
+
+.settled summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.settled details .sample {
+  margin-top: 10px;
+}
+
+.settled .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
