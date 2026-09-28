@@ -331,6 +331,14 @@ describe('what a regex rule publishes', () => {
     expect(pub('^https://a?\\.example\\.com/', 'opt')).toEqual(['rule:opt']);
   });
 
+  it('keeps the id when the host is not closed off', () => {
+    // A prefix match: `^https://a\\.example\\.com` with nothing after it also
+    // matches a.example.com.evil.test, so the host is not the set of things
+    // the rule routes and must not be published as if it were.
+    expect(pub('^https://login\\.example\\.com', 'open')).toEqual(['rule:open']);
+    expect(pub('^https://login\\.example\\.com$')).toEqual(['login.example.com']);
+  });
+
   it('keeps the id when the pattern is not anchored at all', () => {
     // Unanchored, it can match the host anywhere in the URL — including inside
     // a query string on a completely different site.

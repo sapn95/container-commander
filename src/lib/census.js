@@ -89,27 +89,40 @@ export function routeHosts(config) {
  * shipping one into another extension's UI leaks policy detail for no gain — but
  * the host an external sign-in lands on is not the secret part of a policy.
  *
- * Conservative by construction. It reads `^`, a scheme, then a run of literal
- * host characters, and gives up the moment it meets anything that could widen or
- * narrow what follows: an alternation, a class, a quantifier, a group. A regex
+ * Conservative by construction. It reads `^`, a scheme, a run of literal host
+ * characters, an optional port, and then a boundary that ends the host. It gives
+ * up on anything that could widen or narrow what follows: an alternation, a
+ * class, a quantifier, a group, a missing anchor, a missing boundary. A regex
  * matching two hosts must not be published as one of them, because a peer would
- * then stand down on the one host and keep doubling on the other.
+ * stand down on the one and keep doubling the other.
+ *
+ * One widening is accepted and is worth stating. A peer matches a published host
+ * the way this extension does — the host and every subdomain of it — while a
+ * regex pinned to `a.example.com` covers only that name. So a peer may stand
+ * down on `x.a.example.com` where no rule here would have fired. What follows is
+ * not "nobody decides": this extension still sees that request and still runs
+ * the whole ladder over it, having only no specific rule. The alternative is the
+ * pair, live, on the sign-in hand-offs regex rules get written for — and two
+ * tabs through a sign-in is two sessions, which is the disease this extension
+ * exists to cure rather than a nuisance.
  *
  * @param {string} regex  the rule's `match.regex`
  * @returns {string} the host, or '' when it is not a single anchored one
  */
 function anchoredHost(regex) {
-  // `^https://` or `^https?://`, with the optional marker on the s only.
-  const m = /^\^https(\?)?:\/\/([^/]*)/.exec(regex);
-  if (!m) return '';
-  // A port is not part of a host pattern, and a peer matches on host alone.
-  const authority = m[2].replace(/:\d+$/, '');
-  // Every character has to be a literal, or an escaped dot. Anything else —
-  // ( ) [ ] { } | + * ? . $ — means the host is not the fixed thing it looks
-  // like, and guessing which half of it to publish is how a rule that covers
-  // two hosts silently stops covering one.
-  if (!/^(?:[A-Za-z0-9-]|\\\.)+$/.test(authority)) return '';
-  return authority.replace(/\\\./g, '.').toLowerCase();
+  // `^`, the scheme, a run of literal host characters, an optional port, and
+  // then a boundary that ENDS the host: a path separator or the end of the
+  // pattern. The boundary is the whole point. `^https://a\\.example\\.com` with
+  // nothing after it is a prefix match, so it also matches
+  // `a.example.com.evil.test` — publishing it as a host would hand a peer a
+  // name that is not the set of things this rule routes.
+  //
+  // The authority itself may hold only literals and escaped dots. Anything that
+  // could widen or narrow it — an alternation, a class, a quantifier, a group —
+  // means the rule covers more than one host, and publishing one of them would
+  // have the peer stand down on that one and carry on doubling the rest.
+  const m = /^\^https(?:\?)?:\/\/((?:[A-Za-z0-9-]|\\\.)+)(?::\d+)?(?:\/|\$)/.exec(regex);
+  return m ? m[1].replace(/\\\./g, '.').toLowerCase() : '';
 }
 
 /**
