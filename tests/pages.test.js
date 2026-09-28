@@ -380,9 +380,26 @@ describe('the popup', () => {
     expect(box.hidden).toBe(false);
     expect(box.classList.contains('state')).toBe(false);
     expect(box.classList.contains('settled')).toBe(true);
-    expect(document.querySelector('#clash h2').textContent).toMatch(/giving way/i);
+    expect(document.querySelector('#clash h2').textContent).toBe(
+      'linkward is giving way to this add-on',
+    );
     // The stop is still offered, just not as the thing to do.
     expect($('clash-standdown').classList.contains('primary')).toBe(false);
+  });
+
+  it('does not name one peer when several have given way', async () => {
+    // Two add-ons speak this protocol today and the list is meant to grow. A
+    // heading naming one by hand goes wrong the first time it is the other.
+    await mountPopup(loaded, {
+      clash: [
+        { ...CLASH.clash[0], overlap: [], standingDown: true },
+        { ...CLASH.clash[0], name: 'beeline', overlap: [], standingDown: true },
+      ],
+      line: 'linkward 0.8.0 (and 1 more) is also routing navigation, and gives way.',
+    });
+    const heading = document.querySelector('#clash h2').textContent;
+    expect(heading).toBe('The other add-ons are giving way to this one');
+    expect(heading).not.toMatch(/linkward/);
   });
 
   it('keeps the alarm while the other add-on is still routing against it', async () => {

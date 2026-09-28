@@ -77,7 +77,7 @@ function showClash(peers) {
   $('clash').classList.toggle('state', !settled);
   $('clash').classList.toggle('settled', settled);
   document.querySelector('#clash h2').textContent = settled
-    ? 'linkward is giving way to this add-on'
+    ? givingWayHeading(peers.clash)
     : 'Two add-ons are routing this browser';
   $('clash-standdown').classList.toggle('primary', !settled);
   $('clash').hidden = false;
@@ -138,6 +138,22 @@ function wireStandDown(clash) {
       'The background page did not answer, so nothing was paused. Try again, or use Pause under ' +
       'Policy below.';
   });
+}
+
+/**
+ * Who is giving way, named.
+ *
+ * Built from the census rather than written into the page. Any peer that speaks
+ * the protocol can be the one standing down — there are two on the list today
+ * and the list is meant to grow — and a heading naming one of them by hand goes
+ * wrong the first time it is the other, or the first time both do it at once.
+ */
+function givingWayHeading(clash) {
+  const names = (clash ?? []).map((p) => p?.name).filter(Boolean);
+  if (names.length === 1) return `${names[0]} is giving way to this add-on`;
+  // Two or more, or a peer that named itself badly enough to have no name at
+  // all. Counting beats listing here: the names are in the list directly below.
+  return 'The other add-ons are giving way to this one';
 }
 
 /**
