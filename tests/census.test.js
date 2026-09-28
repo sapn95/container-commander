@@ -339,6 +339,25 @@ describe('what a regex rule publishes', () => {
     expect(pub('^https://login\\.example\\.com$')).toEqual(['login.example.com']);
   });
 
+  it('keeps the id when a bare alternation splits the whole pattern', () => {
+    // Position does not matter and depth does. This one reads cleanly as one
+    // host and routes a second the prefix never sees, which is the exact harm
+    // publishing a host is supposed to avoid.
+    expect(pub('^https://a\\.example\\.com/|^https://b\\.other\\.com/', 'split')).toEqual([
+      'rule:split',
+    ]);
+  });
+
+  it('allows an alternation that only chooses a path', () => {
+    // Inside a group it picks between two paths under one host. Rejecting it
+    // would cost a hand-over for nothing.
+    expect(pub('^https://a\\.example\\.com/(x|y)')).toEqual(['a.example.com']);
+    // An escaped pipe is a literal in a path, not the operator.
+    expect(pub('^https://a\\.example\\.com/x\\|y')).toEqual(['a.example.com']);
+    // And inside a character class it is a literal too.
+    expect(pub('^https://a\\.example\\.com/[a|b]')).toEqual(['a.example.com']);
+  });
+
   it('keeps the id when the pattern is not anchored at all', () => {
     // Unanchored, it can match the host anywhere in the URL — including inside
     // a query string on a completely different site.
@@ -379,6 +398,15 @@ describe('a peer that has given way', () => {
     const [found] = clashes(SELF, [GAVE_WAY]);
     expect(found.standingDown).toBe(true);
     expect(found.name).toBe('linkward');
+  });
+
+  it('is not marked when it claims to give way and still claims the hosts', () => {
+    // One reply contradicting itself. The overlap is the half backed by
+    // evidence — those are the hosts both would act on — so believe that half
+    // rather than the claim sitting beside it.
+    const [found] = clashes(SELF, [{ ...GAVE_WAY, routes: ['docs.example.com'] }]);
+    expect(found.overlap).toEqual(['docs.example.com']);
+    expect(found.standingDown).toBe(false);
   });
 
   it('is not marked when it names somebody else', () => {

@@ -121,8 +121,46 @@ function anchoredHost(regex) {
   // could widen or narrow it — an alternation, a class, a quantifier, a group —
   // means the rule covers more than one host, and publishing one of them would
   // have the peer stand down on that one and carry on doubling the rest.
+  //
+  // The prefix is read, but the WHOLE pattern has to be checked: an alternation
+  // at the top level splits the entire expression, so
+  // `^https://a\\.example\\.com/|^https://b\\.other\\.com/` starts with a host
+  // this reads cleanly and routes a second one it never sees.
+  if (hasBareAlternation(regex)) return '';
   const m = /^\^https(?:\?)?:\/\/((?:[A-Za-z0-9-]|\\\.)+)(?::\d+)?(?:\/|\$)/.exec(regex);
   return m ? m[1].replace(/\\\./g, '.').toLowerCase() : '';
+}
+
+/**
+ * Is there a `|` that splits the whole pattern rather than part of one?
+ *
+ * Depth matters and position does not. `(foo|bar)` chooses between two paths
+ * under one host and is safe at any offset; a bare `|` chooses between two whole
+ * expressions wherever it sits, including after the host has been read. So this
+ * counts groups and skips character classes, and answers only about depth zero.
+ *
+ * An escape consumes the next character whatever it is, which is what keeps a
+ * literal `\|` in a path from being mistaken for the operator.
+ */
+function hasBareAlternation(regex) {
+  let depth = 0;
+  let inClass = false;
+  for (let i = 0; i < regex.length; i++) {
+    const ch = regex[i];
+    if (ch === '\\') {
+      i++;
+      continue;
+    }
+    if (inClass) {
+      if (ch === ']') inClass = false;
+      continue;
+    }
+    if (ch === '[') inClass = true;
+    else if (ch === '(') depth++;
+    else if (ch === ')') depth = Math.max(0, depth - 1);
+    else if (ch === '|' && depth === 0) return true;
+  }
+  return false;
 }
 
 /**
@@ -169,11 +207,16 @@ export function clashes(self, answers = []) {
       version: typeof a.version === 'string' ? a.version : '',
       routes,
       overlap: overlapping(self.routes ?? [], routes),
+      // Claimed AND consistent with what the same reply publishes. A peer that
+      // says it is giving way while still listing hosts this policy routes is
+      // contradicting itself in one message, and the overlap is the half backed
+      // by evidence: those are the hosts both would act on. Believe that half.
       standingDown:
         typeof self.id === 'string' &&
         self.id !== '' &&
         Array.isArray(a.defersTo) &&
-        a.defersTo.includes(self.id),
+        a.defersTo.includes(self.id) &&
+        overlapping(self.routes ?? [], routes).length === 0,
     });
   }
   // A peer still fighting outranks one that has given way, whatever either of
