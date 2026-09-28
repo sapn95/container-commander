@@ -18,14 +18,16 @@
            ever seen and no rule can ever fire. A policy loaded on top of that
            still decides nothing, and the log stays empty in a way that reads as
            a quiet day rather than as a dead extension. -->
-      <section id="grant" hidden>
-        <h2>Turn on watching</h2>
+      <section id="grant" class="state caution" hidden>
+        <h2>Nothing is being decided</h2>
         <p class="lead">
           container commander cannot see navigation yet, so it will never decide anything &mdash;
           policy or no policy.
         </p>
         <div class="choices">
-          <button id="grant-button" type="button">Allow it to watch navigation</button>
+          <button id="grant-button" class="primary" type="button">
+            Allow it to watch navigation
+          </button>
         </div>
         <p class="note" id="grant-note">
           Firefox will ask to <b>access your data for all websites</b>. That is how an add-on is
@@ -47,20 +49,46 @@
            being decided twice. Both are states in which the rules below are
            accurate and the browser does not behave as they describe, which is
            the only kind of problem worth putting above the policy. -->
-      <section id="clash" hidden>
-        <h2>Another extension is also routing</h2>
+      <section id="clash" class="state" hidden>
+        <h2>Every link is opening twice</h2>
         <p class="lead" id="clash-line"></p>
         <ul class="rules" id="clash-list"></ul>
+
+        <!-- One button, and it is the only decision this extension is in a
+             position to make. It cannot switch the other add-on off, so it
+             offers the half it owns: stand down and let the other one route.
+             Deciding the other way is done in the other add-on, which the note
+             says, because a button here that pretended to do it would be a
+             button that reports a fix nobody applied. -->
+        <div class="choices">
+          <button id="clash-standdown" class="primary" type="button">Stop routing here</button>
+        </div>
+        <p class="note" id="clash-standdown-note">
+          Pauses container commander until Firefox restarts, so the other add-on keeps the tabs to
+          itself. To decide it the other way round, switch interception off in that add-on instead
+          &mdash; nothing here can do it for you.
+        </p>
+
+        <details>
+          <summary>Make it outlast a restart</summary>
+          <p class="note">
+            Pause is deliberately session-only: a stop that survived a restart would be a second
+            place where routing is configured, which is the problem this add-on exists to remove.
+            The lasting version goes in the policy file, where every other rule already lives. Add
+            these hosts to <code>never</code> and press <b>Reload policy</b>:
+          </p>
+          <pre class="sample" id="clash-never"></pre>
+          <div class="row">
+            <button class="copy" type="button" data-copy="clash-never">Copy the never list</button>
+          </div>
+        </details>
+
         <p class="note">
           Firefox hands the same request to every add-on that asked to hold one, and none of them
-          can see the others &mdash; there is no way to list another add-on's listeners. So if two
-          of them both cancel a navigation and reopen it in a container, Firefox carries out both:
-          one click becomes two tabs, same address, same container. Neither add-on is
-          malfunctioning, which is why this went unnoticed for weeks and why this section exists.
-        </p>
-        <p class="note">
-          Pick one to do the routing and switch the other one's interception off. Both being right
-          about where a host belongs does not help &mdash; agreeing is what produces the pair.
+          can see the others. When two of them both cancel a navigation and reopen it, Firefox
+          carries out both: one click, two tabs, same address, same container. Neither add-on is
+          malfunctioning &mdash; agreeing about where a host belongs is what produces the pair,
+          which is why this ran unnoticed for weeks.
         </p>
       </section>
 

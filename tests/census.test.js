@@ -11,7 +11,14 @@
 // So the cases below are not hypotheticals. The first one IS the bug.
 
 import { describe, it, expect } from 'vitest';
-import { routingState, routeHosts, overlapping, clashes, clashLine } from '../src/lib/census.js';
+import {
+  routingState,
+  routeHosts,
+  overlapping,
+  clashes,
+  clashLine,
+  standDownHosts,
+} from '../src/lib/census.js';
 
 const SELF = { routing: true, routes: ['*.example.com'] };
 
@@ -241,5 +248,57 @@ describe('the sentence it puts on screen', () => {
   it('is null when nothing clashes, so a page can test it directly', () => {
     expect(clashLine([])).toBeNull();
     expect(clashLine()).toBeNull();
+  });
+});
+
+// The durable half of the fix the popup offers. Pause lasts until Firefox
+// restarts; this is the list that goes in the policy file so it lasts longer,
+// and every case below is something that would otherwise be pasted into
+// `never` and quietly match nothing.
+describe('the hosts to hand over when this extension stands down', () => {
+  it('names the shared hosts, because those are the tabs arriving in pairs', () => {
+    expect(
+      standDownHosts([
+        { overlap: ['docs.example.com'], routes: ['docs.example.com', 'code.example.com'] },
+      ]),
+    ).toEqual(['docs.example.com']);
+  });
+
+  it('falls back to the whole route list for a peer that overlaps on nothing', () => {
+    // No shared host does not mean no clash: it is holding the same requests,
+    // and neither side has published a comparable pattern for them.
+    expect(standDownHosts([{ overlap: [], routes: ['code.example.com'] }])).toEqual([
+      'code.example.com',
+    ]);
+  });
+
+  it('drops the star, because this policy language has no globs', () => {
+    // `never` matches a host and every subdomain of it, so `example.com` is what
+    // `*.example.com` means here. Left alone the star matches nothing at all and
+    // the policy looks correct while the pair carries on.
+    expect(standDownHosts([{ overlap: ['*.example.com'] }])).toEqual(['example.com']);
+  });
+
+  it('drops a rule id, which is a label and not a host', () => {
+    // A regex rule is published as its id rather than its source. Pasted into
+    // `never` it fails validation, and the fix dies on a typo nobody wrote.
+    expect(standDownHosts([{ overlap: [], routes: ['rule:msal', 'code.example.com'] }])).toEqual([
+      'code.example.com',
+    ]);
+  });
+
+  it('merges two peers into one list, sorted, without repeats', () => {
+    expect(
+      standDownHosts([
+        { overlap: ['b.example.com'] },
+        { overlap: ['a.example.com', 'B.example.com'] },
+      ]),
+    ).toEqual(['a.example.com', 'b.example.com']);
+  });
+
+  it('answers with an empty list rather than throwing on junk', () => {
+    // Everything here crossed an extension boundary this one does not control.
+    expect(standDownHosts()).toEqual([]);
+    expect(standDownHosts([null, {}, { overlap: [42, '', '   '] }])).toEqual([]);
   });
 });

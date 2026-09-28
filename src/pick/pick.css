@@ -7,6 +7,13 @@
   --border: #d8dce3;
   --accent: #2f6feb;
   --accent-fg: #fff;
+  /* Two state colours, and neither of them is --accent. Blue means "you can
+     press this" everywhere else on the page, and a container's own colour is
+     already spoken for by the dot next to a tab. These two say what the browser
+     is doing that the rules on screen do not describe: amber, nothing is being
+     decided; red, everything is being decided twice. */
+  --warn: #8a5a00;
+  --alert: #b3352b;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -14,6 +21,10 @@
     --fg: #e6e8ec;
     --muted: #9aa1ad;
     --border: #333842;
+    /* Lightened rather than reused: the light-mode pair sits at a contrast that
+       disappears against #16181d. */
+    --warn: #e0a63a;
+    --alert: #f0857a;
   }
 }
 * {
@@ -311,4 +322,121 @@ code {
 .form .row select {
   width: auto;
   flex: 0 0 auto;
+}
+
+/* --- The two states that outrank the page --------------------------------
+   Nothing is being decided (no grant), and everything is being decided twice
+   (a second router). Both mean the same thing: the rules printed below are
+   accurate and the browser is not behaving as they describe. They share one
+   treatment and differ only in colour, because they are one kind of problem.
+
+   A left edge, not a card. This page is a stack of horizontal rules — sections
+   divided by hairlines, lists divided by hairlines — so a VERTICAL rule is the
+   one mark that reads as an exception to the grid instead of as another box on
+   it. Filling these in as tinted cards would have made them look like the
+   component library the rest of the page deliberately is not. */
+
+.state {
+  --state: var(--alert);
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 0;
+  border-left: 3px solid var(--state);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--state) 7%, var(--bg));
+}
+
+.state.caution {
+  --state: var(--warn);
+}
+
+/* Sentence case and the state colour, against the muted uppercase label every
+   ordinary section carries. The heading is the only place the colour is used
+   as type; everywhere else it stays an edge, so one block cannot turn into a
+   ransom note when both states are on screen at once. */
+.state h2 {
+  margin: 0 0 8px;
+  color: var(--state);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.state .lead {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.state .note {
+  margin-top: 12px;
+}
+
+.state .note:first-of-type {
+  margin-top: 0;
+}
+
+/* --- One button that is the answer --------------------------------------
+   Every other button on this page is an outline, which is right when they are
+   alternatives to one another — the container list, Reload, Pause. A state
+   block is not a list of alternatives: it is one recommended action with its
+   consequences written underneath, so it gets the page's only filled button. */
+
+button.primary {
+  justify-content: center;
+  border-color: var(--state, var(--accent));
+  background: var(--state, var(--accent));
+  color: var(--bg);
+  font-weight: 600;
+  text-align: center;
+}
+
+button.primary:hover,
+button.primary:focus-visible {
+  filter: brightness(1.08);
+}
+
+button.primary:disabled {
+  filter: none;
+  opacity: 0.55;
+  cursor: default;
+}
+
+.state .choices {
+  margin-bottom: 4px;
+}
+
+/* The durable fix, folded away. A stand-down that lasts until Firefox restarts
+   is the button; editing the managed file is the real repair, and it is three
+   lines of JSON nobody needs in front of them until they have decided. */
+.state details {
+  margin-top: 14px;
+  font-size: 13px;
+}
+
+.state summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.state summary:hover {
+  color: var(--state);
+}
+
+.state details .sample {
+  margin-top: 10px;
+}
+
+/* Wraps to one control per row on a narrow popup rather than squeezing both. */
+.state .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  button.primary {
+    transition: filter 120ms ease-out;
+  }
 }

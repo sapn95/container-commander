@@ -1,6 +1,7 @@
 // Status, and the two affordances that make managed storage honest.
 
 import { hasWatchPermissions, requestWatchPermissions } from '../lib/permissions.js';
+import { standDownHosts } from '../lib/census.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -27,13 +28,28 @@ if (!status) {
   showRules(status.config);
 }
 
-$('pause').textContent = status?.paused ? 'Resume' : 'Pause for this session';
-$('pause').addEventListener('click', async () => {
-  const r = await chrome.runtime
-    .sendMessage({ type: 'cc:pause', paused: !status?.paused })
-    .catch(() => null);
-  $('pause').textContent = r?.paused ? 'Resume' : 'Pause for this session';
-});
+// Held in a variable rather than read back off `status`, which is the reply to
+// one message sent when the page opened and never changes again. Toggling
+// against it sent `paused: true` on the first click and `paused: true` again on
+// the second, so Pause worked and the Resume it turned into did nothing.
+let paused = status?.paused === true;
+
+function showPaused(next) {
+  paused = next === true;
+  $('pause').textContent = paused ? 'Resume' : 'Pause for this session';
+}
+
+async function setPaused(next) {
+  const r = await chrome.runtime.sendMessage({ type: 'cc:pause', paused: next }).catch(() => null);
+  // The reply is the authority, not the argument: a background page that did
+  // not answer has not paused, and a button that says it did is worse than one
+  // that says nothing.
+  if (r) showPaused(r.paused);
+  return r !== null;
+}
+
+showPaused(paused);
+$('pause').addEventListener('click', () => setPaused(!paused));
 
 $('reload').addEventListener('click', () => chrome.runtime.reload());
 
@@ -50,6 +66,7 @@ function showClash(peers) {
   if (!peers?.line) return;
   $('clash').hidden = false;
   $('clash-line').textContent = peers.line;
+  wireStandDown(peers.clash);
   const list = $('clash-list');
   list.replaceChildren();
   for (const other of peers.clash) {
@@ -69,6 +86,51 @@ function showClash(peers) {
     }
     list.append(li);
   }
+}
+
+/**
+ * The one decision this popup can carry out, and the paste-ready version of the
+ * one it cannot.
+ *
+ * Standing down is pausing. That is the whole of it: routingState() reports
+ * `routing: false` while paused, so the peer's own warning clears on its next
+ * census too, and the pair really is over rather than merely quieter here. It
+ * lasts until Firefox restarts, which the note under the button says, because a
+ * fix that silently expires overnight is how this bug got a second life.
+ */
+function wireStandDown(clash) {
+  const button = $('clash-standdown');
+
+  // Built from the peers on screen, so the snippet and the sentence above it
+  // are describing the same census rather than two reads a second apart.
+  const hosts = standDownHosts(clash);
+  $('clash-never').textContent = hosts.length
+    ? JSON.stringify({ never: hosts }, null, 2)
+    : '// The other add-on published no hosts, so there is nothing to name here.\n' +
+      '// Pause above, or switch its interception off.';
+  wireCopyButtons();
+
+  if (paused) return standingDown(button);
+
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    if (await setPaused(true)) return standingDown(button);
+    // Nothing was paused, so the button goes back to offering it. Leaving it
+    // disabled would read as done.
+    button.disabled = false;
+    $('clash-standdown-note').textContent =
+      'The background page did not answer, so nothing was paused. Try again, or use Pause under ' +
+      'Policy below.';
+  });
+}
+
+/** The same action, named in the past tense. */
+function standingDown(button) {
+  button.disabled = true;
+  button.textContent = 'Routing stopped here';
+  $('clash-standdown-note').textContent =
+    'Paused until Firefox restarts, so the other add-on has these tabs to itself. Resume is under ' +
+    'Policy below. To make it last, see the policy edit above.';
 }
 
 // Checked after the status, shown above it. Without this grant the extension is

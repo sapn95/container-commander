@@ -191,12 +191,25 @@ describe('the picker', () => {
 });
 
 describe('the popup', () => {
-  async function mountPopup(status, peers = null) {
+  // cc:pause is modelled rather than stubbed flat. The background page holds
+  // the paused flag and answers with what it now is, and a double that always
+  // replied with the mount-time status would agree with a Resume button that
+  // resumes nothing — which is exactly the bug this shape caught.
+  async function mountPopup(status, peers = null, { pauseAnswers = true } = {}) {
+    let paused = status?.paused === true;
     document.documentElement.innerHTML = html('src/popup/popup.html');
     globalThis.chrome = {
       runtime: {
         getManifest: () => ({ version: '0.1.0' }),
-        sendMessage: vi.fn(async (m) => (m?.type === 'cc:peers' ? peers : status)),
+        sendMessage: vi.fn(async (m) => {
+          if (m?.type === 'cc:peers') return peers;
+          if (m?.type === 'cc:pause') {
+            if (!pauseAnswers) throw new Error('no receiving end');
+            paused = m.paused === true;
+            return { paused };
+          }
+          return status;
+        }),
         reload: vi.fn(),
       },
     };
@@ -308,6 +321,75 @@ describe('the popup', () => {
     await mountPopup(loaded, null);
     expect($('clash').hidden).toBe(true);
     expect($('revision').textContent).toBe('policy-abc');
+  });
+
+  // The warning named the problem and left the reader to go and fix it by hand
+  // in an add-on this one cannot see. These are the two halves it can offer
+  // instead: the decision it is in a position to carry out, and the paste-ready
+  // text for the one it is not.
+  it('stands down on one click, and says so in the past tense', async () => {
+    await mountPopup(loaded, CLASH);
+    $('clash-standdown').click();
+    await settle();
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'cc:pause', paused: true });
+    expect($('clash-standdown').disabled).toBe(true);
+    expect($('clash-standdown').textContent).toMatch(/stopped/i);
+    // Session-scoped, and the note has to keep saying so: a fix that quietly
+    // expires at the next restart is how this bug got its second life.
+    expect($('clash-standdown-note').textContent).toMatch(/until Firefox restarts/i);
+    // And the Pause button below is now the same fact, not the opposite one.
+    expect($('pause').textContent).toBe('Resume');
+  });
+
+  it('puts the offer back when nothing was actually paused', async () => {
+    // A disabled button reads as done. Reporting a fix nobody applied is the
+    // one outcome worse than the warning it replaced.
+    await mountPopup(loaded, CLASH, { pauseAnswers: false });
+    $('clash-standdown').click();
+    await settle();
+    expect($('clash-standdown').disabled).toBe(false);
+    expect($('clash-standdown-note').textContent).toMatch(/nothing was paused/i);
+  });
+
+  it('opens already standing down when the session is paused', async () => {
+    await mountPopup({ ...loaded, paused: true }, CLASH);
+    expect($('clash-standdown').disabled).toBe(true);
+    expect($('clash-standdown').textContent).toMatch(/stopped/i);
+  });
+
+  it('offers the shared hosts as a never list that the policy would accept', async () => {
+    await mountPopup(loaded, CLASH);
+    const never = JSON.parse($('clash-never').textContent);
+    expect(never).toEqual({ never: ['docs.example.com'] });
+    // It goes into a file the validator reads, so it has to survive that too.
+    expect(validateConfig({ schema: 1, revision: 'r', rules: [], ...never }).ok).toBe(true);
+  });
+
+  it('says there is nothing to name rather than printing an empty never list', async () => {
+    await mountPopup(loaded, {
+      clash: [{ ...CLASH.clash[0], overlap: [], routes: ['rule:msal'] }],
+      line: 'linkward 0.1.0 is also routing navigation.',
+    });
+    expect($('clash-never').textContent).toMatch(/nothing to name/i);
+    expect($('clash-never').textContent).not.toContain('rule:msal');
+  });
+
+  // Not part of the clash work, found by it: the handler toggled against the
+  // reply to a message sent once when the page opened, so it sent paused:true
+  // on the first click and paused:true again on the second. Pause worked; the
+  // Resume it turned into did nothing at all.
+  it('resumes on the second click instead of pausing twice', async () => {
+    await mountPopup(loaded);
+    $('pause').click();
+    await settle();
+    expect($('pause').textContent).toBe('Resume');
+    $('pause').click();
+    await settle();
+    expect(chrome.runtime.sendMessage).toHaveBeenLastCalledWith({
+      type: 'cc:pause',
+      paused: false,
+    });
+    expect($('pause').textContent).toBe('Pause for this session');
   });
 });
 
@@ -663,11 +745,28 @@ describe('the toolbar panel', () => {
   const WORK = { name: 'work', cookieStoreId: 'firefox-container-2', colorCode: '#f00' };
   const HOME = { name: 'personal', cookieStoreId: 'firefox-container-1', colorCode: '#0f0' };
 
-  async function mountPanel({ tab, containers = [WORK, HOME], granted = true, peers = null } = {}) {
+  async function mountPanel({
+    tab,
+    containers = [WORK, HOME],
+    granted = true,
+    peers = null,
+    pauseAnswers = true,
+  } = {}) {
     document.documentElement.innerHTML = html('src/switch/switch.html');
     globalThis.chrome = {
       runtime: {
-        sendMessage: vi.fn(async (m) => (m?.type === 'cc:peers' ? peers : { moved: true })),
+        sendMessage: vi.fn(async (m) => {
+          if (m?.type === 'cc:peers') return peers;
+          // Modelled, not flattened to { moved: true }: the panel treats the
+          // reply as the authority on whether anything was actually paused, so
+          // a double that answers yes to every message would let a broken
+          // stand-down report success.
+          if (m?.type === 'cc:pause') {
+            if (!pauseAnswers) throw new Error('no receiving end');
+            return { paused: m.paused === true };
+          }
+          return { moved: true };
+        }),
         openOptionsPage: vi.fn(async () => {}),
       },
       tabs: { query: vi.fn(async () => (tab ? [tab] : [])) },
@@ -825,6 +924,30 @@ describe('the toolbar panel', () => {
     await mountPanel({ tab: inWork, peers: { clash: [{}], line: 'linkward is also routing.' } });
     expect($('clash').hidden).toBe(false);
     expect($('clash-line').textContent).toBe('linkward is also routing.');
+  });
+
+  it('hands the tabs over on one click, from the panel as from the popup', async () => {
+    await mountPanel({
+      tab: inWork,
+      peers: { clash: [{}], line: 'linkward is also routing.' },
+    });
+    $('clash-standdown').click();
+    await settle();
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ type: 'cc:pause', paused: true });
+    expect($('clash-standdown').textContent).toMatch(/stopped/i);
+    expect($('clash-standdown-note').textContent).toMatch(/until Firefox restarts/i);
+  });
+
+  it('offers the stand-down again when nothing was paused', async () => {
+    await mountPanel({
+      tab: inWork,
+      peers: { clash: [{}], line: 'linkward is also routing.' },
+      pauseAnswers: false,
+    });
+    $('clash-standdown').click();
+    await settle();
+    expect($('clash-standdown').disabled).toBe(false);
+    expect($('clash-standdown-note').textContent).toMatch(/nothing was paused/i);
   });
 
   it('keeps the clash a strip and never a state', async () => {

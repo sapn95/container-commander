@@ -12,10 +12,12 @@
            all, so the missing grant must not stand in front of the one thing
            this panel is for. It says what is switched off and offers to switch
            it on, and the panel underneath stays usable either way. -->
-      <section id="warn" hidden>
+      <section id="warn" class="state caution" hidden>
         <p class="lead">Routing is off. Nothing is decided automatically.</p>
         <div class="choices">
-          <button id="grant-button" type="button">Allow it to watch navigation</button>
+          <button id="grant-button" class="primary" type="button">
+            Allow it to watch navigation
+          </button>
         </div>
       </section>
 
@@ -23,10 +25,14 @@
            nothing is decided, this one says it is decided twice over. A strip,
            never a state — moving a tab by hand still works perfectly while two
            extensions are fighting over the automatic case. -->
-      <section id="clash" hidden>
+      <section id="clash" class="state" hidden>
         <p class="lead" id="clash-line"></p>
-        <p class="note">
-          Every navigation both of them route opens two tabs. Switch interception off in one.
+        <div class="choices">
+          <button id="clash-standdown" class="primary" type="button">Stop routing here</button>
+        </div>
+        <p class="note" id="clash-standdown-note">
+          Pauses this add-on until Firefox restarts. To decide it the other way, switch interception
+          off in the other one.
         </p>
       </section>
 

@@ -116,6 +116,49 @@ function displayable(value) {
 }
 
 /**
+ * The hosts a `never` list would have to name for this extension to stand down.
+ *
+ * The durable half of the fix the popup offers. Pausing is session-scoped on
+ * purpose, so the lasting version is an edit to the managed policy, and this is
+ * the list that edit needs. `never` is checked before the rules and it also
+ * discards bookmark-folder hints, so a host named here really does take this
+ * extension out of the pair rather than merely out of the rule that matched.
+ *
+ * Three things happen to the peers' answers on the way:
+ *
+ *   - The OVERLAP wins where there is one, because those are the hosts both
+ *     add-ons act on and therefore the tabs actually arriving in pairs. Where a
+ *     peer overlaps on nothing, its whole route list is offered instead: it is
+ *     holding the same requests, and no shared host only means neither has
+ *     published one.
+ *   - `rule:<id>` entries are dropped. A regex rule is published as its id
+ *     rather than its source, so it is a label and not a host, and pasting it
+ *     into `never` would produce a policy that fails validation.
+ *   - A leading `*.` comes off. This policy language has no globs: `never`
+ *     matches a host and every subdomain of it, so `example.com` is what
+ *     `*.example.com` means here, and leaving the star on would silently match
+ *     nothing at all.
+ *
+ * Sorted, because this is copied into a file somebody reviews in a diff.
+ *
+ * @param {Array<{overlap?: string[], routes?: string[]}>} found  clashes()
+ * @returns {string[]}
+ */
+export function standDownHosts(found = []) {
+  const out = new Set();
+  for (const peer of found) {
+    const from = peer?.overlap?.length ? peer.overlap : (peer?.routes ?? []);
+    for (const entry of from) {
+      if (typeof entry !== 'string') continue;
+      const host = entry.trim().replace(/^\*\./, '').toLowerCase();
+      if (!host || host.startsWith('rule:')) continue;
+      out.add(host);
+    }
+  }
+  return [...out].sort();
+}
+
+/**
  * The patterns two lists agree on.
  *
  * Not set intersection: `*.example.com` and `docs.example.com` are the same

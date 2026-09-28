@@ -40,8 +40,36 @@ chrome.runtime
     if (!peers?.line) return;
     $('clash-line').textContent = peers.line;
     $('clash').hidden = false;
+    $('clash-standdown').addEventListener('click', standDown);
   })
   .catch(() => {});
+
+/**
+ * Hand the tabs to the other add-on.
+ *
+ * The same action the popup offers, and the same thing underneath: paused means
+ * routingState() answers `routing: false`, so the peer's warning clears on its
+ * next census as well. The panel does not carry the policy-file version of it —
+ * there is no room for a JSON block at 260px, and the popup is one click away
+ * through Rules and settings.
+ */
+async function standDown(event) {
+  const button = event.currentTarget;
+  button.disabled = true;
+  const reply = await chrome.runtime
+    .sendMessage({ type: 'cc:pause', paused: true })
+    .catch(() => null);
+  if (reply?.paused) {
+    button.textContent = 'Routing stopped here';
+    $('clash-standdown-note').textContent =
+      'Paused until Firefox restarts. Resume it under Rules and settings.';
+    return;
+  }
+  // Not paused, so the offer comes back. A button left disabled reads as done.
+  button.disabled = false;
+  $('clash-standdown-note').textContent =
+    'Nothing was paused — the background page did not answer. Try again.';
+}
 
 $('settings').addEventListener('click', () => {
   chrome.runtime.openOptionsPage().catch(() => {});
