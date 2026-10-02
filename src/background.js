@@ -171,8 +171,10 @@ const plain = (cookieStoreId) =>
  *
  * @param {{tabId: number, url: string, from: string, to: string}} what
  */
-function humanOverride({ tabId, url, from, to }) {
-  if (!/^https?:\/\//.test(url) || typeof tabId !== 'number') return Promise.resolve(false);
+// async only so the container names can be read before the line is written. It
+// still answers with a promise, which is what the message handler awaits.
+async function humanOverride({ tabId, url, from, to }) {
+  if (!/^https?:\/\//.test(url) || typeof tabId !== 'number') return false;
   // Already there. Reopening would cost the tab its history and its scroll
   // position to arrive exactly where it started.
   //
@@ -180,12 +182,13 @@ function humanOverride({ tabId, url, from, to }) {
   // `firefox-default` while tabs.create wants the key absent — so the menu's
   // "No container" and a tab that already has none are the same place spelled
   // two ways, and the raw comparison missed it.
-  if (plain(from) === plain(to)) return Promise.resolve(false);
+  if (plain(from) === plain(to)) return false;
 
   // Logged like any other outcome, and named. The popup's list is the product,
   // and an override that happened invisibly would be the one decision it could
   // not account for. The rung is negative because this is beside the ladder and
   // not on it.
+  const containers = await listContainers();
   log.unshift({
     at: Date.now(),
     url,
@@ -195,12 +198,15 @@ function humanOverride({ tabId, url, from, to }) {
       reason: 'human-override',
       cookieStoreId: to,
     },
+    from: containerName(containers, from),
+    to: containerName(containers, to),
   });
   log.length = Math.min(log.length, LOG_MAX);
 
   // A reopen is a close and a re-fetch, so this cannot preserve a POST — which
   // is why the ladder never does it unasked. Here it was asked for.
-  return openThere(tabId, url, to).then(() => true);
+  await openThere(tabId, url, to);
+  return true;
 }
 
 function armMenu() {
@@ -314,10 +320,42 @@ async function situationFor(details) {
   };
 }
 
+/**
+ * The name of a container, for a log a person reads.
+ *
+ * `No container` rather than an empty cell: a tab outside every container is a
+ * real answer and an empty cell reads as a value that failed to load.
+ */
+function containerName(containers, cookieStoreId) {
+  const id = plain(cookieStoreId);
+  if (!id) return 'No container';
+  return (containers ?? []).find((c) => plain(c.cookieStoreId) === id)?.name ?? id;
+}
+
 /** Answered once per tab, whichever way it went. */
 function remember(decision, input, details) {
   if (decision.rung > RUNG.GATE) spent.add(details.tabId);
-  log.unshift({ at: input.now, url: details.url, decision });
+  // Where the tab was, and where this decision left it.
+  //
+  // The log said what was DECIDED and never what happened, and the question
+  // people arrive with is the other one: why is this tab not in the container I
+  // expected. `leave` at rung 2 on a tab that already carries a container is a
+  // correct decision and an invisible one — it is also the single most common
+  // reason a sign-in lands in the wrong place, and reading it off `leave·2`
+  // meant knowing the ladder by heart.
+  const was = input.tab?.cookieStoreId;
+  log.unshift({
+    at: input.now,
+    url: details.url,
+    decision,
+    from: containerName(input.containers, was),
+    // A reopen lands in the rule's container; everything else leaves the tab
+    // exactly where it already was.
+    to: containerName(
+      input.containers,
+      decision.action === 'reopen' ? decision.cookieStoreId : was,
+    ),
+  });
   log.length = Math.min(log.length, LOG_MAX);
 }
 

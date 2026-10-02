@@ -516,3 +516,26 @@ button.primary:disabled {
   gap: 8px;
   align-items: center;
 }
+
+/* A decision takes two lines now: what was asked for, and where it ended up.
+   The second line is the one that answers "why is this tab not in <container>",
+   which the list could not answer at all while the reason lived in a tooltip
+   and the container was not recorded. */
+.rules li.entry {
+  display: block;
+  padding: 7px 0;
+}
+
+.rules li.entry .line {
+  display: flex;
+  gap: 8px;
+}
+
+.rules li.entry .why {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
