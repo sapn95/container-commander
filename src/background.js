@@ -42,9 +42,11 @@ function onBeforeRequest(details) {
   return situationFor(details).then((input) => {
     if (!input) return {};
     const decision = decide(input);
-    remember(decision, input, details);
+    const entry = remember(decision, input, details);
     if (decision.action === 'reopen') {
-      openThere(details.tabId, details.url, decision.cookieStoreId);
+      openThere(details.tabId, details.url, decision.cookieStoreId).then((outcome) =>
+        settleOutcome(entry, outcome),
+      );
       // Cancelled rather than redirected: a redirect cannot move a tab into
       // another cookie store, so the page would load in the wrong one first.
       return { cancel: true };
@@ -192,8 +194,8 @@ async function humanOverride({ tabId, url, from, to }) {
   // the menu being built and the click, most plainly — and the old order wrote
   // "moved to <container>" either way. In a list whose whole purpose is to say
   // where a tab went, that line is the one lie it cannot afford.
-  const moved = await openThere(tabId, url, to);
-  if (!moved) return false;
+  const outcome = await openThere(tabId, url, to);
+  if (outcome === 'refused') return false;
 
   // Logged like any other outcome, and named. The popup's list is the product,
   // and an override that happened invisibly would be the one decision it could
@@ -211,6 +213,7 @@ async function humanOverride({ tabId, url, from, to }) {
     },
     from: containerName(containers, from),
     to: containerName(containers, to),
+    ...(outcome === 'moved' ? {} : { outcome }),
   });
   log.length = Math.min(log.length, LOG_MAX);
   return true;
@@ -339,7 +342,13 @@ function containerName(containers, cookieStoreId) {
   return (containers ?? []).find((c) => plain(c.cookieStoreId) === id)?.name ?? id;
 }
 
-/** Answered once per tab, whichever way it went. */
+/**
+ * Answered once per tab, whichever way it went.
+ *
+ * Returns the line it wrote. A reopen is decided here and carried out after the
+ * blocking listener has already answered, so the destination written now is an
+ * intention; the caller corrects it with what actually happened.
+ */
 function remember(decision, input, details) {
   if (decision.rung > RUNG.GATE) spent.add(details.tabId);
   // Where the tab was, and where this decision left it.
@@ -351,7 +360,7 @@ function remember(decision, input, details) {
   // reason a sign-in lands in the wrong place, and reading it off `leave·2`
   // meant knowing the ladder by heart.
   const was = input.tab?.cookieStoreId;
-  log.unshift({
+  const entry = {
     at: input.now,
     url: details.url,
     decision,
@@ -362,8 +371,27 @@ function remember(decision, input, details) {
       input.containers,
       decision.action === 'reopen' ? decision.cookieStoreId : was,
     ),
-  });
+  };
+  log.unshift(entry);
   log.length = Math.min(log.length, LOG_MAX);
+  return entry;
+}
+
+/**
+ * Correct a reopen's line with what the browser actually did.
+ *
+ * The listener answers `{cancel: true}` and the replacement is made afterwards,
+ * so the line is written before the outcome is known. Leaving it at that made
+ * the list claim every reopen succeeded — including the ones `tabs.create`
+ * refused, which is a container deleted between the rule being compiled and the
+ * link being clicked.
+ */
+function settleOutcome(entry, outcome) {
+  if (!entry || outcome === 'moved') return;
+  entry.outcome = outcome;
+  // Refused means nothing moved, so the destination has to go back to where the
+  // tab still is. `left-over` really did move; it only failed to tidy up.
+  if (outcome === 'refused') entry.to = entry.from;
 }
 
 async function listContainers() {
@@ -414,7 +442,7 @@ async function openThere(tabId, url, cookieStoreId) {
     await tell('linkward@sapn95.github.io', { type: 'cc:release', url });
     // Answered, not swallowed. The caller writes the line that says where the
     // tab went, and a reopen that never happened must not be logged as one.
-    return false;
+    return 'refused';
   }
   if (typeof created?.id === 'number') {
     claims.bind({ tabId: created.id, sender: PEERS[0] });
@@ -423,10 +451,19 @@ async function openThere(tabId, url, cookieStoreId) {
   }
   // Separate on purpose: the link is already open in the right container by
   // now, so a failure here must not undo that.
+  //
+  // But it is reported. A replacement that exists beside an original nobody
+  // could close is two tabs on one address, which is the exact symptom this
+  // extension exists to remove — logging it as a clean move would hide the one
+  // outcome the log is read to find.
+  let closed = true;
   if (typeof tabId === 'number' && tabId >= 0) {
-    await chrome.tabs.remove(tabId).catch(() => {});
+    closed = await chrome.tabs.remove(tabId).then(
+      () => true,
+      () => false,
+    );
   }
-  return true;
+  return closed ? 'moved' : 'left-over';
 }
 
 /** A peer being absent is the normal case, so this never rejects. */

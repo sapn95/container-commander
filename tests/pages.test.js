@@ -296,6 +296,26 @@ describe('the popup', () => {
     expect(why).not.toContain('→');
   });
 
+  it('spells out a reopen the browser did not complete', async () => {
+    // `left-over` on its own answers nothing to somebody asking why a tab is in
+    // the wrong place, and two tabs on one address is the symptom this whole
+    // extension exists to remove.
+    await mountPopup({
+      ...loaded,
+      log: [
+        {
+          at: 1,
+          url: 'https://example.com/x',
+          decision: { action: 'reopen', rung: 4, reason: 'rule:corp-wide' },
+          from: 'No container',
+          to: 'work',
+          outcome: 'left-over',
+        },
+      ],
+    });
+    expect(document.querySelector('#log li .why').textContent).toContain('both are open');
+  });
+
   it('prints no arrow to nowhere for an entry logged before this existed', async () => {
     // The log survives an extension reload, so older entries have neither
     // field. A bare arrow for them would read as a move that never happened.

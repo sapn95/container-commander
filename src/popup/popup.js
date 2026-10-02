@@ -201,6 +201,15 @@ $('grant-button').addEventListener('click', async (event) => {
     'you can also grant it in about:addons under this add-on, on the Permissions tab.';
 });
 
+// A reopen is carried out after the request has already been answered, so these
+// are the two ways it can fail afterwards. Spelled out rather than printed as
+// the bare word, because this line is read by somebody asking why a tab is in
+// the wrong place and `left-over` answers nothing on its own.
+const OUTCOME = {
+  refused: 'the browser refused to open it there',
+  'left-over': 'the original tab could not be closed, so both are open',
+};
+
 const entries = status?.log ?? [];
 $('log-empty').hidden = entries.length > 0;
 for (const e of entries) {
@@ -227,7 +236,9 @@ for (const e of entries) {
   // wrong place.
   const why = document.createElement('span');
   why.className = 'why';
-  why.textContent = [whereItWent(e), e.decision.reason].filter(Boolean).join(' · ');
+  why.textContent = [whereItWent(e), e.decision.reason, OUTCOME[e.outcome]]
+    .filter(Boolean)
+    .join(' · ');
 
   li.append(top, why);
   $('log').append(li);
