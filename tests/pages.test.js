@@ -257,6 +257,62 @@ describe('the popup', () => {
     expect(row.textContent).toContain('leave');
   });
 
+  // The list answered "what was decided" and never "where did the tab end up",
+  // so the question people arrive with could only be answered by knowing the
+  // ladder by heart. The reason was in a tooltip, which is to say nowhere.
+  it('says where the tab went, and shows the reason without a hover', async () => {
+    await mountPopup({
+      ...loaded,
+      log: [
+        {
+          at: 1,
+          url: 'https://example.com/x',
+          decision: { action: 'reopen', rung: 4, reason: 'rule:corp-wide' },
+          from: 'No container',
+          to: 'work',
+        },
+      ],
+    });
+    const why = document.querySelector('#log li .why').textContent;
+    expect(why).toContain('No container → work');
+    expect(why).toContain('rule:corp-wide');
+  });
+
+  it('does not draw an arrow when the tab did not move', async () => {
+    await mountPopup({
+      ...loaded,
+      log: [
+        {
+          at: 1,
+          url: 'https://example.com/x',
+          decision: { action: 'leave', rung: 2, reason: 'user-container-entry' },
+          from: 'work',
+          to: 'work',
+        },
+      ],
+    });
+    const why = document.querySelector('#log li .why').textContent;
+    expect(why).toContain('work · user-container-entry');
+    expect(why).not.toContain('→');
+  });
+
+  it('prints no arrow to nowhere for an entry logged before this existed', async () => {
+    // The log survives an extension reload, so older entries have neither
+    // field. A bare arrow for them would read as a move that never happened.
+    await mountPopup({
+      ...loaded,
+      log: [
+        {
+          at: 1,
+          url: 'https://example.com/x',
+          decision: { action: 'leave', rung: 6, reason: 'no-match' },
+        },
+      ],
+    });
+    const why = document.querySelector('#log li .why').textContent;
+    expect(why).toBe('no-match');
+  });
+
   it('says so when the background page did not answer', async () => {
     await mountPopup(null);
     expect($('revision').textContent).toMatch(/did not answer/i);

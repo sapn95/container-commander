@@ -205,16 +205,44 @@ const entries = status?.log ?? [];
 $('log-empty').hidden = entries.length > 0;
 for (const e of entries) {
   const li = document.createElement('li');
+  li.className = 'entry';
+
+  const top = document.createElement('span');
+  top.className = 'line';
   const host = document.createElement('span');
   host.className = 'host';
-  // textContent: these are addresses somebody visited.
+  // textContent throughout: these are addresses somebody visited.
   host.textContent = e.url;
   const verdict = document.createElement('span');
   verdict.className = 'verdict';
   verdict.textContent = `${e.decision.action}·${e.decision.rung}`;
-  verdict.title = e.decision.reason ?? '';
-  li.append(host, verdict);
+  top.append(host, verdict);
+
+  // The second line, and the reason this list was worth changing. It used to
+  // say what was decided and never where the tab ended up, so the question
+  // people actually arrive with — why is this tab not in the container I
+  // expected — could only be answered by knowing the ladder by heart. A `leave`
+  // that kept a tab in the container it was already in is a correct decision
+  // and an invisible one, and it is the commonest reason a sign-in lands in the
+  // wrong place.
+  const why = document.createElement('span');
+  why.className = 'why';
+  why.textContent = [whereItWent(e), e.decision.reason].filter(Boolean).join(' · ');
+
+  li.append(top, why);
   $('log').append(li);
+}
+
+/**
+ * Where the tab ended up, and where it came from when that is not the same.
+ *
+ * An entry logged before this was recorded has neither field — the log survives
+ * a reload — and answers undefined, which the caller's filter drops. No guard
+ * for that here: one would be dead code, and a dead guard with a comment
+ * claiming it catches something is worse than no guard.
+ */
+function whereItWent({ from, to }) {
+  return from && from !== to ? `${from} → ${to}` : to;
 }
 
 /**

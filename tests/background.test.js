@@ -464,6 +464,89 @@ describe('a bookmark click, end to end', () => {
   }
 });
 
+// The list said what was DECIDED and never where the tab ended up, so the
+// question people actually arrive with — why is this tab not in the container I
+// expected — could only be answered by knowing the ladder by heart. A `leave`
+// that kept a tab where it already was is a correct decision and an invisible
+// one, and it is the commonest reason a sign-in lands in the wrong place.
+describe('the log says where the tab went', () => {
+  const WORK = { name: 'work', cookieStoreId: 'firefox-container-2' };
+
+  async function lastEntry(c) {
+    let status;
+    c.runtime.onMessage.emitSync({ type: 'cc:status' }, {}, (r) => {
+      status = r;
+    });
+    await settle(10);
+    return status.log[0];
+  }
+
+  it('names the container a reopen moved the tab into', async () => {
+    const c = await boot({ containers: [WORK] });
+    await c.tabs.onCreated.emit({
+      id: 7,
+      url: 'https://example.com/doc',
+      cookieStoreId: 'firefox-default',
+      active: true,
+      windowId: 1,
+      index: 0,
+    });
+    await request(c, { url: 'https://example.com/doc' });
+    await settle(30);
+    const entry = await lastEntry(c);
+    expect(entry.decision.action).toBe('reopen');
+    expect(entry.from).toBe('No container');
+    expect(entry.to).toBe('work');
+  });
+
+  it('says where a tab was left, not nothing', async () => {
+    // `leave` is the decision that needed this most: it reads as "did nothing"
+    // while being the reason the tab is where it is.
+    const c = await boot({ containers: [WORK], policy: { schema: 1, revision: 'r', rules: [] } });
+    c.tabs.get = vi.fn(async (id) => ({
+      id,
+      cookieStoreId: WORK.cookieStoreId,
+      active: true,
+      windowId: 1,
+      index: 0,
+    }));
+    await c.tabs.onCreated.emit({ id: 7, url: 'https://example.com/doc' });
+    await request(c, { url: 'https://example.com/doc' });
+    await settle(30);
+    const entry = await lastEntry(c);
+    expect(entry.decision.action).toBe('leave');
+    expect(entry.from).toBe('work');
+    expect(entry.to).toBe('work');
+  });
+
+  it('says No container rather than leaving the cell empty', async () => {
+    // An empty cell reads as a value that failed to load. A tab outside every
+    // container is a real answer and has to look like one.
+    const c = await boot({ containers: [], policy: { schema: 1, revision: 'r', rules: [] } });
+    await c.tabs.onCreated.emit({ id: 7, url: 'https://example.com/doc' });
+    await request(c, { url: 'https://example.com/doc' });
+    await settle(30);
+    expect((await lastEntry(c)).to).toBe('No container');
+  });
+
+  it('falls back to the raw id for a container it cannot name', async () => {
+    // Containers are renamed and deleted by hand. An id beats an empty string:
+    // it is still something to search for.
+    const c = await boot({ containers: [], policy: { schema: 1, revision: 'r', rules: [] } });
+    c.tabs.get = vi.fn(async (id) => ({
+      id,
+      cookieStoreId: 'firefox-container-9',
+      active: true,
+      windowId: 1,
+      index: 0,
+    }));
+    await c.tabs.onCreated.emit({ id: 7, url: 'https://example.com/doc' });
+    await request(c, { url: 'https://example.com/doc' });
+    await settle(30);
+    expect((await lastEntry(c)).to).toBe('firefox-container-9');
+  });
+});
+
 describe('when it is not allowed to watch', () => {
   // The worse of the two ways to be switched off, and the one that was silent.
   // A policy loaded and no permission to see navigation is an extension that is
