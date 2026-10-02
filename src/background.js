@@ -184,6 +184,17 @@ async function humanOverride({ tabId, url, from, to }) {
   // two ways, and the raw comparison missed it.
   if (plain(from) === plain(to)) return false;
 
+  // A reopen is a close and a re-fetch, so this cannot preserve a POST — which
+  // is why the ladder never does it unasked. Here it was asked for.
+  //
+  // Done BEFORE it is logged, and the log now follows what happened rather than
+  // what was asked for. tabs.create can refuse — a container deleted between
+  // the menu being built and the click, most plainly — and the old order wrote
+  // "moved to <container>" either way. In a list whose whole purpose is to say
+  // where a tab went, that line is the one lie it cannot afford.
+  const moved = await openThere(tabId, url, to);
+  if (!moved) return false;
+
   // Logged like any other outcome, and named. The popup's list is the product,
   // and an override that happened invisibly would be the one decision it could
   // not account for. The rung is negative because this is beside the ladder and
@@ -202,10 +213,6 @@ async function humanOverride({ tabId, url, from, to }) {
     to: containerName(containers, to),
   });
   log.length = Math.min(log.length, LOG_MAX);
-
-  // A reopen is a close and a re-fetch, so this cannot preserve a POST — which
-  // is why the ladder never does it unasked. Here it was asked for.
-  await openThere(tabId, url, to);
   return true;
 }
 
@@ -405,7 +412,9 @@ async function openThere(tabId, url, cookieStoreId) {
     });
   } catch {
     await tell('linkward@sapn95.github.io', { type: 'cc:release', url });
-    return;
+    // Answered, not swallowed. The caller writes the line that says where the
+    // tab went, and a reopen that never happened must not be logged as one.
+    return false;
   }
   if (typeof created?.id === 'number') {
     claims.bind({ tabId: created.id, sender: PEERS[0] });
@@ -417,6 +426,7 @@ async function openThere(tabId, url, cookieStoreId) {
   if (typeof tabId === 'number' && tabId >= 0) {
     await chrome.tabs.remove(tabId).catch(() => {});
   }
+  return true;
 }
 
 /** A peer being absent is the normal case, so this never rejects. */
