@@ -547,6 +547,44 @@ describe('the log says where the tab went', () => {
   });
 });
 
+// Raised in review, and in this list it matters more than usual: an entry that
+// says "me → sbb" about a tab that never moved is the single lie a log whose
+// purpose is to say where a tab went cannot afford.
+describe('an override that the browser refused', () => {
+  it('reports failure and writes no line', async () => {
+    const c = await boot({ containers: [{ name: 'work', cookieStoreId: 'firefox-container-2' }] });
+    c.tabs.get = vi.fn(async (id) => ({ id, cookieStoreId: 'firefox-default', active: true }));
+    // A container deleted between the menu being built and the click.
+    c.tabs.create = vi.fn(async () => {
+      throw new Error('No such cookieStoreId');
+    });
+    let moved;
+    c.runtime.onMessage.emitSync(
+      {
+        type: 'cc:override',
+        tabId: 7,
+        url: 'https://example.com/x',
+        from: '',
+        to: 'firefox-container-2',
+      },
+      {},
+      (r) => {
+        moved = r;
+      },
+    );
+    await settle(30);
+    expect(moved).toEqual({ moved: false });
+
+    let status;
+    c.runtime.onMessage.emitSync({ type: 'cc:status' }, {}, (r) => {
+      status = r;
+    });
+    expect(status.log).toEqual([]);
+    // And the tab it failed to replace is still there.
+    expect(c.tabs.remove).not.toHaveBeenCalled();
+  });
+});
+
 describe('when it is not allowed to watch', () => {
   // The worse of the two ways to be switched off, and the one that was silent.
   // A policy loaded and no permission to see navigation is an extension that is
