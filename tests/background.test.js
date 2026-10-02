@@ -550,6 +550,60 @@ describe('the log says where the tab went', () => {
 // Raised in review, and in this list it matters more than usual: an entry that
 // says "me → sbb" about a tab that never moved is the single lie a log whose
 // purpose is to say where a tab went cannot afford.
+// The ladder's own reopen has the same gap as the override: the listener answers
+// {cancel: true} and the replacement is made afterwards, so the line is written
+// before anyone knows whether it worked.
+describe('a reopen the browser did not complete', () => {
+  const WORK = { name: 'work', cookieStoreId: 'firefox-container-2' };
+
+  async function logOf(c) {
+    let status;
+    c.runtime.onMessage.emitSync({ type: 'cc:status' }, {}, (r) => {
+      status = r;
+    });
+    await settle(10);
+    return status.log[0];
+  }
+
+  it('takes the destination back when tabs.create refused', async () => {
+    const c = await boot({ containers: [WORK] });
+    c.tabs.create = vi.fn(async () => {
+      throw new Error('No such cookieStoreId');
+    });
+    await c.tabs.onCreated.emit({ id: 7, url: 'https://example.com/doc' });
+    await request(c, { url: 'https://example.com/doc' });
+    await settle(40);
+    const entry = await logOf(c);
+    expect(entry.outcome).toBe('refused');
+    // Nothing moved, so the line must not keep claiming a destination.
+    expect(entry.to).toBe(entry.from);
+  });
+
+  it('says both tabs are open when the original could not be closed', async () => {
+    // A replacement beside an original nobody could close is two tabs on one
+    // address, which is the exact symptom this extension exists to remove.
+    const c = await boot({ containers: [WORK] });
+    c.tabs.remove = vi.fn(async () => {
+      throw new Error('No tab with id 7');
+    });
+    await c.tabs.onCreated.emit({ id: 7, url: 'https://example.com/doc' });
+    await request(c, { url: 'https://example.com/doc' });
+    await settle(40);
+    const entry = await logOf(c);
+    expect(entry.outcome).toBe('left-over');
+    // It really did move, so the destination stands.
+    expect(entry.to).toBe('work');
+  });
+
+  it('marks nothing when the move was clean', async () => {
+    const c = await boot({ containers: [WORK] });
+    await c.tabs.onCreated.emit({ id: 7, url: 'https://example.com/doc' });
+    await request(c, { url: 'https://example.com/doc' });
+    await settle(40);
+    expect((await logOf(c)).outcome).toBeUndefined();
+  });
+});
+
 describe('an override that the browser refused', () => {
   it('reports failure and writes no line', async () => {
     const c = await boot({ containers: [{ name: 'work', cookieStoreId: 'firefox-container-2' }] });
