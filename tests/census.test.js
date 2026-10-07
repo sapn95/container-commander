@@ -484,7 +484,7 @@ describe('add-ons that route and never answer', () => {
 
   it('names one that can take a request before it is sent', () => {
     const [found] = silentRouters(
-      [ext({ permissions: ['webRequestBlocking'], hostPermissions: ['<all_urls>'] })],
+      [ext({ permissions: ['webRequest', 'webRequestBlocking'], hostPermissions: ['<all_urls>'] })],
       WHO,
     );
     expect(found.why).toEqual(['can take a request before it is sent']);
@@ -494,7 +494,7 @@ describe('add-ons that route and never answer', () => {
     const [found] = silentRouters(
       [
         ext({
-          permissions: ['contextualIdentities', 'cookies', 'webRequestBlocking'],
+          permissions: ['contextualIdentities', 'cookies', 'webRequest', 'webRequestBlocking'],
           hostPermissions: ['https://*/*'],
         }),
       ],
@@ -511,7 +511,7 @@ describe('add-ons that route and never answer', () => {
       silentRouters(
         [
           ext({
-            permissions: ['webRequestBlocking'],
+            permissions: ['webRequest', 'webRequestBlocking'],
             hostPermissions: ['moz-extension://00000000-0000-4000-8000-000000000000/*'],
           }),
         ],
@@ -529,6 +529,27 @@ describe('add-ons that route and never answer', () => {
         WHO,
       ),
     ).toEqual([]);
+  });
+
+  it('ignores webRequestBlocking without webRequest', () => {
+    // webRequestBlocking only adds blocking to an API that webRequest opens.
+    // Without both, no listener can be registered at all.
+    expect(
+      silentRouters(
+        [ext({ permissions: ['webRequestBlocking'], hostPermissions: ['<all_urls>'] })],
+        WHO,
+      ),
+    ).toEqual([]);
+  });
+
+  it('ignores cookies on its own, and that is a choice', () => {
+    // Raised in review as a gap, and kept. `tabs.create` needs only `cookies`
+    // to name a container, so a cookies-only add-on can technically put a tab
+    // in one — but `cookies` is declared by password managers, privacy tools
+    // and anything that reads a session. Counting it fills the list with
+    // add-ons that route nothing, and a list containing somebody's password
+    // manager is the warning they learn to click past.
+    expect(silentRouters([ext({ permissions: ['cookies'] })], WHO)).toEqual([]);
   });
 
   it('ignores contextualIdentities without cookies', () => {
