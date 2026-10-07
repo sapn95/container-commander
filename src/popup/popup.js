@@ -1,6 +1,10 @@
 // Status, and the two affordances that make managed storage honest.
 
-import { hasWatchPermissions, requestWatchPermissions } from '../lib/permissions.js';
+import {
+  hasWatchPermissions,
+  requestWatchPermissions,
+  requestManagementPermission,
+} from '../lib/permissions.js';
 import { standDownHosts, allStandingDown } from '../lib/census.js';
 
 const $ = (id) => document.getElementById(id);
@@ -174,6 +178,59 @@ function showStandDown() {
       'itself. To decide it the other way round, switch interception off in that add-on instead — ' +
       'nothing here can do it for you.';
 }
+
+// Asked after the peers, for the same reason: this page opening is the moment
+// somebody wants the answer, and nothing else pays for it.
+showOthers(await chrome.runtime.sendMessage({ type: 'cc:others' }).catch(() => null));
+
+/**
+ * The add-ons the protocol cannot see.
+ *
+ * Two states and they are both real answers. Granted: here is what can route
+ * and will never answer, or nothing. Not granted: that question has not been
+ * asked, which the page says rather than showing an empty list that would read
+ * as a clean result.
+ */
+function showOthers(reply) {
+  if (!reply?.granted) {
+    $('others-ask').hidden = false;
+    return;
+  }
+  const others = reply.others ?? [];
+  if (!others.length) return;
+  $('others').hidden = false;
+  $('others-line').textContent =
+    others.length === 1
+      ? `${[others[0].name, others[0].version].filter(Boolean).join(' ')} can route containers and does not answer this add-on's protocol.`
+      : `${others.length} add-ons can route containers and do not answer this add-on's protocol.`;
+  const list = $('others-list');
+  list.replaceChildren();
+  for (const o of others) {
+    const li = document.createElement('li');
+    const who = document.createElement('b');
+    // textContent: a name chosen by somebody else's manifest.
+    who.textContent = [o.name, o.version].filter(Boolean).join(' ');
+    const what = document.createElement('span');
+    what.className = 'url';
+    // What it DECLARED, not what it is doing. Nothing here can know the second.
+    what.textContent = ` ${o.why.join(', ')}`;
+    li.append(who, what);
+    list.append(li);
+  }
+}
+
+$('others-button').addEventListener('click', async (event) => {
+  // FIRST, before any await. See the grant button below.
+  const granted = await requestManagementPermission();
+  if (granted) {
+    location.reload();
+    return;
+  }
+  event.target.disabled = true;
+  $('others-note').textContent =
+    'Firefox refused, or the request was dismissed. Add-ons that do not answer the protocol stay ' +
+    'invisible here; you can still see them in about:addons.';
+});
 
 // Checked after the status, shown above it. Without this grant the extension is
 // structurally unable to decide anything, so it outranks every other thing this

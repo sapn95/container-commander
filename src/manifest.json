@@ -16,7 +16,7 @@
     }
   },
   "permissions": ["activeTab", "storage", "contextualIdentities", "cookies", "bookmarks", "menus"],
-  "optional_permissions": ["webRequest", "webRequestBlocking", "<all_urls>"],
+  "optional_permissions": ["webRequest", "webRequestBlocking", "management", "<all_urls>"],
   "background": {
     "scripts": ["background.js"],
     "type": "module"

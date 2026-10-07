@@ -195,13 +195,14 @@ describe('the popup', () => {
   // the paused flag and answers with what it now is, and a double that always
   // replied with the mount-time status would agree with a Resume button that
   // resumes nothing — which is exactly the bug this shape caught.
-  async function mountPopup(status, peers = null, { pauseAnswers = true } = {}) {
+  async function mountPopup(status, peers = null, { pauseAnswers = true, others = null } = {}) {
     let paused = status?.paused === true;
     document.documentElement.innerHTML = html('src/popup/popup.html');
     globalThis.chrome = {
       runtime: {
         getManifest: () => ({ version: '0.1.0' }),
         sendMessage: vi.fn(async (m) => {
+          if (m?.type === 'cc:others') return others;
           if (m?.type === 'cc:peers') return peers;
           if (m?.type === 'cc:pause') {
             if (!pauseAnswers) throw new Error('no receiving end');
@@ -397,6 +398,67 @@ describe('the popup', () => {
     await mountPopup(loaded, null);
     expect($('clash').hidden).toBe(true);
     expect($('revision').textContent).toBe('policy-abc');
+  });
+
+  // Multi-Account Containers ran beside this add-on for weeks: a blocking
+  // listener, a list of site assignments, no protocol, invisible to every check
+  // either side could run. This section is the only thing that can see one.
+  describe('add-ons that route and never answer', () => {
+    const MAC = {
+      id: '@testpilot-containers',
+      name: 'Firefox Multi-Account Containers',
+      version: '8.3.8',
+      why: ['opens tabs in containers', 'can take a request before it is sent'],
+    };
+
+    it('names it and says what it declared it can do', async () => {
+      await mountPopup(
+        loaded,
+        { clash: [], line: null },
+        { others: { granted: true, others: [MAC] } },
+      );
+      expect($('others').hidden).toBe(false);
+      expect($('others-line').textContent).toContain('Firefox Multi-Account Containers 8.3.8');
+      const row = document.querySelector('#others-list li');
+      expect(row.textContent).toContain('opens tabs in containers');
+      expect($('others-ask').hidden).toBe(true);
+    });
+
+    it('counts them when there are several', async () => {
+      await mountPopup(
+        loaded,
+        { clash: [], line: null },
+        { others: { granted: true, others: [MAC, { ...MAC, id: 'b@x', name: 'Other' }] } },
+      );
+      expect($('others-line').textContent).toMatch(/^2 add-ons/);
+    });
+
+    it('stays out of the way when nothing else can route', async () => {
+      await mountPopup(
+        loaded,
+        { clash: [], line: null },
+        { others: { granted: true, others: [] } },
+      );
+      expect($('others').hidden).toBe(true);
+      expect($('others-ask').hidden).toBe(true);
+    });
+
+    it('offers the grant rather than showing an empty result', async () => {
+      // An empty list without the permission would read as a clean census. The
+      // honest answer is that the question has not been asked.
+      await mountPopup(
+        loaded,
+        { clash: [], line: null },
+        { others: { granted: false, others: [] } },
+      );
+      expect($('others-ask').hidden).toBe(false);
+      expect($('others').hidden).toBe(true);
+    });
+
+    it('offers the grant when the background cannot answer at all', async () => {
+      await mountPopup(loaded, { clash: [], line: null }, { others: null });
+      expect($('others-ask').hidden).toBe(false);
+    });
   });
 
   // The warning named the problem and left the reader to go and fix it by hand

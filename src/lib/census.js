@@ -13,9 +13,16 @@
 // had no way to report being switched on TWICE.
 //
 // The platform gives no listener census: an extension cannot enumerate other
-// extensions' webRequest listeners, and `management` would need a permission
-// whose warning is worse than the bug. So this is asked, over the claim
-// protocol, and answered honestly by each participant — see docs/protocol.md.
+// extensions' webRequest listeners. So this is asked, over the claim protocol,
+// and answered honestly by each participant — see docs/protocol.md.
+//
+// That leaves everything which does not answer, and Multi-Account Containers is
+// the example that cost a day: a blocking listener, a list of site assignments,
+// no protocol, and therefore invisible to every check either side could run.
+// `management` can see it, and this file used to say that permission's warning
+// was worse than the bug. As a REQUIRED permission it still would be. Optional
+// and asked for from this add-on's own page it is the only answer there is, so
+// silentRouters() reads what it returns — see lib/permissions.js.
 //
 // Pure. No browser APIs: the caller collects the answers and hands them over.
 
@@ -161,6 +168,67 @@ function hasBareAlternation(regex) {
     else if (ch === '|' && depth === 0) return true;
   }
   return false;
+}
+
+/**
+ * Installed add-ons that can route a container and will never answer a ping.
+ *
+ * By CAPABILITY, never by name. A list of known ids goes stale the first time
+ * somebody installs the next container add-on, and it would have to be shipped
+ * and released to learn one — so this reads what each add-on declares it can
+ * do, which is the thing that actually matters:
+ *
+ *   contextualIdentities   it can create tabs in a container.
+ *   webRequestBlocking     it can take a request away from the tab it was
+ *                          heading for, which is what makes two of them open
+ *                          two tabs. Only counted with `<all_urls>` or a host
+ *                          pattern: a blocking listener with no host to run on
+ *                          cannot act on anything.
+ *
+ * `enabled` is required. A disabled add-on routes nothing and naming it would
+ * be the warning that cries wolf — the one people learn to click past, so that
+ * the time it is real it gets clicked past too.
+ *
+ * Peers are excluded because they are already in the census, by name, with what
+ * they are actually doing. Listing them twice would say a protocol that works
+ * is a problem.
+ *
+ * @param {Array<object>} infos     management.getAll() results
+ * @param {{selfId?: string, peerIds?: string[]}} who
+ * @returns {Array<{id, name, version, why: string[]}>} by name
+ */
+export function silentRouters(infos = [], { selfId, peerIds = [] } = {}) {
+  const known = new Set([selfId, ...peerIds].filter(Boolean));
+  const found = [];
+  for (const a of Array.isArray(infos) ? infos : []) {
+    if (!a || typeof a !== 'object') continue;
+    if (a.type !== 'extension' || a.enabled !== true) continue;
+    if (typeof a.id !== 'string' || !a.id || known.has(a.id)) continue;
+    const perms = Array.isArray(a.permissions) ? a.permissions : [];
+    const hosts = Array.isArray(a.hostPermissions) ? a.hostPermissions : [];
+    const why = [];
+    if (perms.includes('contextualIdentities')) why.push('opens tabs in containers');
+    // A blocking listener is only a router where it has somewhere to run. An
+    // add-on whose only host pattern is its own moz-extension:// origin cannot
+    // see a navigation — measured on a real profile, where exactly that add-on
+    // would otherwise have been reported as a second router.
+    if (perms.includes('webRequestBlocking') && hosts.some(onTheWeb)) {
+      why.push('can take a request before it is sent');
+    }
+    if (!why.length) continue;
+    found.push({
+      id: a.id,
+      name: displayable(a.name) || displayable(a.id) || 'another extension',
+      version: displayable(a.version),
+      why,
+    });
+  }
+  return found.sort((x, y) => x.name.localeCompare(y.name));
+}
+
+/** Does this host pattern reach an ordinary web page? */
+function onTheWeb(pattern) {
+  return typeof pattern === 'string' && /^(<all_urls>|\*:|https?:)/.test(pattern);
 }
 
 /**
