@@ -474,10 +474,10 @@ describe('add-ons that route and never answer', () => {
     hostPermissions: [],
     ...over,
   });
-  const WHO = { selfId: 'me@example.com', peerIds: ['peer@example.com'] };
+  const WHO = { selfId: 'me@example.com', answeredIds: ['peer@example.com'] };
 
   it('names one that can open tabs in containers', () => {
-    const [found] = silentRouters([ext({ permissions: ['contextualIdentities'] })], WHO);
+    const [found] = silentRouters([ext({ permissions: ['contextualIdentities', 'cookies'] })], WHO);
     expect(found.name).toBe('Other');
     expect(found.why).toEqual(['opens tabs in containers']);
   });
@@ -494,7 +494,7 @@ describe('add-ons that route and never answer', () => {
     const [found] = silentRouters(
       [
         ext({
-          permissions: ['contextualIdentities', 'webRequestBlocking'],
+          permissions: ['contextualIdentities', 'cookies', 'webRequestBlocking'],
           hostPermissions: ['https://*/*'],
         }),
       ],
@@ -524,23 +524,46 @@ describe('add-ons that route and never answer', () => {
     // It routes nothing. Naming it is the warning people learn to click past,
     // so that the time it is real it gets clicked past too.
     expect(
-      silentRouters([ext({ enabled: false, permissions: ['contextualIdentities'] })], WHO),
+      silentRouters(
+        [ext({ enabled: false, permissions: ['contextualIdentities', 'cookies'] })],
+        WHO,
+      ),
     ).toEqual([]);
   });
 
-  it('ignores this extension and the peers it already asks', () => {
+  it('ignores contextualIdentities without cookies', () => {
+    // tabs.create refuses a cookieStoreId without `cookies`, so an add-on
+    // holding only the first can list containers and never open a tab in one.
+    expect(silentRouters([ext({ permissions: ['contextualIdentities'] })], WHO)).toEqual([]);
+  });
+
+  it('names a peer that is installed and said nothing', () => {
+    // The case this whole function exists for. A peer whose background never
+    // started answers exactly like one that is not installed, and excluding it
+    // by configured id would hide the one peer whose report cannot be trusted.
+    const [found] = silentRouters(
+      [ext({ id: 'silent@example.com', permissions: ['contextualIdentities', 'cookies'] })],
+      { selfId: 'me@example.com', answeredIds: [] },
+    );
+    expect(found.id).toBe('silent@example.com');
+  });
+
+  it('ignores this extension and the peers that answered', () => {
     // A peer is in the census by name with what it is actually doing. Listing
     // it twice would say a protocol that works is a problem.
     const both = [
-      ext({ id: 'me@example.com', permissions: ['contextualIdentities'] }),
-      ext({ id: 'peer@example.com', permissions: ['contextualIdentities'] }),
+      ext({ id: 'me@example.com', permissions: ['contextualIdentities', 'cookies'] }),
+      ext({ id: 'peer@example.com', permissions: ['contextualIdentities', 'cookies'] }),
     ];
     expect(silentRouters(both, WHO)).toEqual([]);
   });
 
   it('ignores a theme and anything that declares neither', () => {
     expect(
-      silentRouters([ext({ type: 'theme', permissions: ['contextualIdentities'] })], WHO),
+      silentRouters(
+        [ext({ type: 'theme', permissions: ['contextualIdentities', 'cookies'] })],
+        WHO,
+      ),
     ).toEqual([]);
     expect(silentRouters([ext({ permissions: ['storage', 'tabs'] })], WHO)).toEqual([]);
   });
@@ -553,7 +576,7 @@ describe('add-ons that route and never answer', () => {
 
   it('names something findable when an add-on names itself badly', () => {
     const [found] = silentRouters(
-      [ext({ name: '   ', permissions: ['contextualIdentities'] })],
+      [ext({ name: '   ', permissions: ['contextualIdentities', 'cookies'] })],
       WHO,
     );
     expect(found.name).toBe('other@example.com');
@@ -562,8 +585,16 @@ describe('add-ons that route and never answer', () => {
   it('sorts by name, because the list is read', () => {
     const rows = silentRouters(
       [
-        ext({ id: 'b@example.com', name: 'Zebra', permissions: ['contextualIdentities'] }),
-        ext({ id: 'a@example.com', name: 'Alpha', permissions: ['contextualIdentities'] }),
+        ext({
+          id: 'b@example.com',
+          name: 'Zebra',
+          permissions: ['contextualIdentities', 'cookies'],
+        }),
+        ext({
+          id: 'a@example.com',
+          name: 'Alpha',
+          permissions: ['contextualIdentities', 'cookies'],
+        }),
       ],
       WHO,
     );

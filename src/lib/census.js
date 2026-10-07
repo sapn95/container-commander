@@ -178,7 +178,11 @@ function hasBareAlternation(regex) {
  * and released to learn one — so this reads what each add-on declares it can
  * do, which is the thing that actually matters:
  *
- *   contextualIdentities   it can create tabs in a container.
+ *   contextualIdentities   it can read and create containers. On its own that
+ *   + cookies              is not enough to put a tab in one: `tabs.create`
+ *                          refuses a `cookieStoreId` without `cookies`, so an
+ *                          add-on holding only the first can list containers
+ *                          and never open a tab in one.
  *   webRequestBlocking     it can take a request away from the tab it was
  *                          heading for, which is what makes two of them open
  *                          two tabs. Only counted with `<all_urls>` or a host
@@ -189,16 +193,20 @@ function hasBareAlternation(regex) {
  * be the warning that cries wolf — the one people learn to click past, so that
  * the time it is real it gets clicked past too.
  *
- * Peers are excluded because they are already in the census, by name, with what
- * they are actually doing. Listing them twice would say a protocol that works
- * is a problem.
+ * `answeredIds` is what the census heard back from, and it is deliberately NOT
+ * the configured peer list. A peer that is installed and silent — uninstalled
+ * background, a broken build, a listener that never registered — is precisely
+ * the case this function exists to catch, and excluding it by id would hide the
+ * one peer whose own report cannot be trusted. A peer that did answer is left
+ * out, because it is already in the census by name with what it is actually
+ * doing, and listing it twice would say a protocol that works is a problem.
  *
  * @param {Array<object>} infos     management.getAll() results
- * @param {{selfId?: string, peerIds?: string[]}} who
+ * @param {{selfId?: string, answeredIds?: string[]}} who
  * @returns {Array<{id, name, version, why: string[]}>} by name
  */
-export function silentRouters(infos = [], { selfId, peerIds = [] } = {}) {
-  const known = new Set([selfId, ...peerIds].filter(Boolean));
+export function silentRouters(infos = [], { selfId, answeredIds = [] } = {}) {
+  const known = new Set([selfId, ...answeredIds].filter(Boolean));
   const found = [];
   for (const a of Array.isArray(infos) ? infos : []) {
     if (!a || typeof a !== 'object') continue;
@@ -207,7 +215,9 @@ export function silentRouters(infos = [], { selfId, peerIds = [] } = {}) {
     const perms = Array.isArray(a.permissions) ? a.permissions : [];
     const hosts = Array.isArray(a.hostPermissions) ? a.hostPermissions : [];
     const why = [];
-    if (perms.includes('contextualIdentities')) why.push('opens tabs in containers');
+    if (perms.includes('contextualIdentities') && perms.includes('cookies')) {
+      why.push('opens tabs in containers');
+    }
     // A blocking listener is only a router where it has somewhere to run. An
     // add-on whose only host pattern is its own moz-extension:// origin cannot
     // see a navigation — measured on a real profile, where exactly that add-on

@@ -564,6 +564,10 @@ let clash = [];
 // they can finish in either order, and without this the slower one writes last
 // and the badge ends up reporting a state that has already been superseded.
 let censusRun = 0;
+// The peers that answered the last census, which is not the same as the peers
+// this extension asks. One that is installed and silent is the case the silent
+// router list exists to catch, so it must not be excluded by id.
+let answeredPeers = [];
 
 async function takeCensus() {
   const run = ++censusRun;
@@ -582,10 +586,12 @@ async function takeCensus() {
     PEERS.map((id) => tell(id, { type: 'cc:ping' }, CENSUS_TIMEOUT_MS)),
   );
   const found = clashes(self, answers);
+  const answered = answers.map((a) => (typeof a?.id === 'string' ? a.id : '')).filter(Boolean);
   // A superseded run still answers the page that asked it — that page is owed
   // what it measured — but it does not touch the cached state behind the badge.
   if (run === censusRun) {
     clash = found;
+    answeredPeers = answered;
     badge();
   }
   return { self, clash: found, line: clashLine(found) };
@@ -691,7 +697,7 @@ async function otherRouters() {
     const all = await chrome.management.getAll();
     return {
       granted: true,
-      others: silentRouters(all, { selfId: chrome.runtime.id, peerIds: PEERS }),
+      others: silentRouters(all, { selfId: chrome.runtime.id, answeredIds: answeredPeers }),
     };
   } catch {
     // Granted a moment ago and gone now, or an API this browser does not have.
