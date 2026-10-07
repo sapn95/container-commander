@@ -182,13 +182,24 @@ page said the first.
 container add-ons is wrong the first time somebody installs the next one, and
 learning that one would need a release. What an add-on **declares** does not go
 stale: `contextualIdentities` **with** `cookies` means it can put a tab in a
-container, and `webRequestBlocking` with a host pattern that reaches the web
-means it can take a request before it is sent. Both are in
-`management.getAll()`.
+container, and `webRequest` **with** `webRequestBlocking` and a host pattern
+that reaches the web means it can take a request before it is sent. All of it is
+in `management.getAll()`.
 
-`cookies` is not padding. `tabs.create` refuses a `cookieStoreId` without it, so
-an add-on holding only `contextualIdentities` can list containers and never open
-a tab in one.
+Neither pairing is padding. `tabs.create` refuses a `cookieStoreId` without
+`cookies`, so `contextualIdentities` alone can list containers and never open a
+tab in one; and `webRequestBlocking` only adds blocking to an API that
+`webRequest` opens, so alone it registers no listener at all.
+
+**`cookies` on its own is deliberately not counted.** Review called that a gap
+and it is a choice. `tabs.create` needs only `cookies` to name a container, so a
+cookies-only add-on can technically put a tab in one — but `cookies` is declared
+by password managers, privacy tools and anything that reads a session, several of
+them on this profile. Counting it fills the list with add-ons that route nothing,
+and a list containing somebody's password manager is the warning they learn to
+click past. Under-reporting a container add-on that holds no
+`contextualIdentities` is the cheaper mistake: it cannot see the containers it
+would have to name.
 
 The host pattern is not a detail. Measured on a real profile, an add-on that
 declares `webRequestBlocking` with no host but its own `moz-extension://` origin

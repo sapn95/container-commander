@@ -183,11 +183,23 @@ function hasBareAlternation(regex) {
  *                          refuses a `cookieStoreId` without `cookies`, so an
  *                          add-on holding only the first can list containers
  *                          and never open a tab in one.
- *   webRequestBlocking     it can take a request away from the tab it was
- *                          heading for, which is what makes two of them open
- *                          two tabs. Only counted with `<all_urls>` or a host
- *                          pattern: a blocking listener with no host to run on
- *                          cannot act on anything.
+ *   webRequest             it can take a request away from the tab it was
+ *   + webRequestBlocking   heading for, which is what makes two of them open
+ *                          two tabs. Both, because `webRequestBlocking` only
+ *                          adds blocking to an API that `webRequest` opens, and
+ *                          only with `<all_urls>` or a host pattern: a blocking
+ *                          listener with no host to run on cannot act.
+ *
+ * `cookies` alone is NOT counted, and that was raised in review as a gap. It is
+ * true that `tabs.create` needs only `cookies` to name a container, so a
+ * cookies-only add-on can technically put a tab in one. It is also declared by
+ * password managers, privacy tools and anything that reads a session — this
+ * profile has several — so counting it would fill the list with add-ons that
+ * route nothing. The list is read by somebody deciding which add-on to switch
+ * off, and a list containing their password manager is the warning they learn
+ * to click past. Under-reporting a container add-on that holds no
+ * `contextualIdentities` is the cheaper mistake: it cannot see the containers
+ * it would have to name.
  *
  * `enabled` is required. A disabled add-on routes nothing and naming it would
  * be the warning that cries wolf — the one people learn to click past, so that
@@ -222,7 +234,11 @@ export function silentRouters(infos = [], { selfId, answeredIds = [] } = {}) {
     // add-on whose only host pattern is its own moz-extension:// origin cannot
     // see a navigation — measured on a real profile, where exactly that add-on
     // would otherwise have been reported as a second router.
-    if (perms.includes('webRequestBlocking') && hosts.some(onTheWeb)) {
+    if (
+      perms.includes('webRequest') &&
+      perms.includes('webRequestBlocking') &&
+      hosts.some(onTheWeb)
+    ) {
       why.push('can take a request before it is sent');
     }
     if (!why.length) continue;
