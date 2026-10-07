@@ -181,9 +181,14 @@ page said the first.
 **Why the capability check and not a list of names:** a curated list of known
 container add-ons is wrong the first time somebody installs the next one, and
 learning that one would need a release. What an add-on **declares** does not go
-stale: `contextualIdentities` means it can put a tab in a container, and
-`webRequestBlocking` with a host pattern that reaches the web means it can take a
-request before it is sent. Both are in `management.getAll()`.
+stale: `contextualIdentities` **with** `cookies` means it can put a tab in a
+container, and `webRequestBlocking` with a host pattern that reaches the web
+means it can take a request before it is sent. Both are in
+`management.getAll()`.
+
+`cookies` is not padding. `tabs.create` refuses a `cookieStoreId` without it, so
+an add-on holding only `contextualIdentities` can list containers and never open
+a tab in one.
 
 The host pattern is not a detail. Measured on a real profile, an add-on that
 declares `webRequestBlocking` with no host but its own `moz-extension://` origin
@@ -198,6 +203,13 @@ own page, by somebody reading what it is for, it is a different bargain. Nothing
 breaks without it: the census still works, the peers still answer, and the popup
 says plainly that an add-on which does not answer is invisible rather than
 showing an empty list that would read as a clean result.
+
+**The peer that says nothing is the point:** the list excludes the peers that
+ANSWERED the census, never the peers this add-on is configured to ask. A peer
+installed and silent — a background that never started, a listener that never
+registered, a broken build — answers exactly like one that is not installed, and
+excluding it by configured id would have hidden the single peer whose own report
+cannot be trusted. Found in review, before it shipped.
 
 **What it does not do:** it reports what an add-on CAN do, never what it is
 doing. Nothing on this side can know the second about an add-on that will not
