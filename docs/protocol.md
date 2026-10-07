@@ -151,6 +151,22 @@ wildcard as covering both its subdomains and its apex, and reports the match
 under the more specific of the two, because that is the string somebody can
 search their own settings for.
 
+### What the protocol cannot see
+
+An add-on that does not answer `cc:ping` is indistinguishable from one that is
+not installed, so a clean census means "nothing that speaks to me is routing"
+and never "nothing else is routing". Multi-Account Containers is the standing
+example: `<all_urls>`, a blocking listener, a list of site assignments, no
+protocol. See F9.
+
+Those are found by CAPABILITY instead, through the optional `management`
+permission — `contextualIdentities`, or `webRequestBlocking` with a host pattern
+that reaches the web. Never by a list of known ids, which is wrong the first time
+somebody installs the next container add-on.
+
+It reports what an add-on CAN do and never what it is doing. Only a participant
+can answer the second, which is the whole reason this protocol exists.
+
 ## Directionality
 
 Who tells whom, so no cooperating extension ever asks about another's tab:

@@ -142,9 +142,9 @@ and five more to the same container, with interception on. Both hold a
 precisely what they were configured to do, both reported themselves healthy,
 both were _right_ about where those hosts belong. Commander's badge could report
 the two ways it can be switched **off** and had no way to report being switched
-**on twice**. Neither extension could see the other, and neither could be made
-to: there is no API that lists another extension's webRequest listeners, and
-`management` wants a permission whose warning is worse than the bug. Agreement
+**on twice**. Neither extension could see the other: there is no API
+that lists another extension's webRequest listeners, and `management` was ruled
+out because its warning was judged worse than the bug — a judgement F9 revisits. Agreement
 between the two was the cause, so every check either one could run on its own
 came back clean.
 
@@ -165,3 +165,41 @@ own UI: commander marks the toolbar badge and names the other add-on in the pane
 and the popup. The fix is then one click by a person — switch interception off in
 one of them — which is the correct resolution and not one an extension is
 entitled to make for its peer. See [protocol.md](protocol.md#ccping).
+
+## F9 — The add-on that answers nothing is invisible
+
+**Observed:** three weeks after F8 was fixed, the same symptom came back on a
+sign-in host, and both routers reported themselves clean. They were. The third
+one was Multi-Account Containers: a blocking listener, `<all_urls>`, a list of
+eight site assignments, and no protocol. It had been there the whole time.
+
+The census asks. An add-on that does not answer is indistinguishable from one
+that is not installed, so the honest reading of a clean census was never "nothing
+else is routing" — it was "nothing else that speaks to me is routing", and the
+page said the first.
+
+**Why the capability check and not a list of names:** a curated list of known
+container add-ons is wrong the first time somebody installs the next one, and
+learning that one would need a release. What an add-on **declares** does not go
+stale: `contextualIdentities` means it can put a tab in a container, and
+`webRequestBlocking` with a host pattern that reaches the web means it can take a
+request before it is sent. Both are in `management.getAll()`.
+
+The host pattern is not a detail. Measured on a real profile, an add-on that
+declares `webRequestBlocking` with no host but its own `moz-extension://` origin
+cannot see a navigation at all, and reporting it would have been a second router
+that does not exist.
+
+**Why the permission is optional, and stays optional:** Firefox describes
+`management` as "Monitor extension usage and manage themes". Required at install,
+from an add-on whose job is routing, that is the trade this project refused on
+day one — and F8's write-up says so in as many words. Asked for from the add-on's
+own page, by somebody reading what it is for, it is a different bargain. Nothing
+breaks without it: the census still works, the peers still answer, and the popup
+says plainly that an add-on which does not answer is invisible rather than
+showing an empty list that would read as a clean result.
+
+**What it does not do:** it reports what an add-on CAN do, never what it is
+doing. Nothing on this side can know the second about an add-on that will not
+say. That limit is in the wording on the page, because a warning that implies
+more certainty than it has is the next bug in this catalogue.

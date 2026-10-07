@@ -7,9 +7,10 @@
 
 import { decide, RUNG } from './lib/engine.js';
 import { createClaims } from './lib/claims.js';
-import { clashes, clashLine, routingState, allStandingDown } from './lib/census.js';
+import { clashes, clashLine, routingState, allStandingDown, silentRouters } from './lib/census.js';
 import { loadConfig } from './lib/config.js';
 import { isCandidateTab } from './lib/candidates.js';
+import { hasManagementPermission } from './lib/permissions.js';
 import { noteFocusChange, readFocusState, seedFocusState } from './lib/focus.js';
 
 const PEERS = ['linkward@sapn95.github.io', 'beeline@sapn95.github.io'];
@@ -665,6 +666,39 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   );
   return true;
 });
+
+/**
+ * The add-ons that can route and will never answer a ping.
+ *
+ * Asked only when the popup asks, and only answered when `management` has been
+ * granted. Without the grant this returns `{granted: false, others: []}` rather
+ * than an error: the page says plainly that an add-on which does not answer is
+ * invisible, and offers the grant. That is a true sentence either way, which an
+ * empty list pretending to be a clean census would not be.
+ */
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type !== 'cc:others') return undefined;
+  otherRouters().then(
+    (result) => sendResponse(result),
+    () => sendResponse({ granted: false, others: [] }),
+  );
+  return true;
+});
+
+async function otherRouters() {
+  if (!(await hasManagementPermission())) return { granted: false, others: [] };
+  try {
+    const all = await chrome.management.getAll();
+    return {
+      granted: true,
+      others: silentRouters(all, { selfId: chrome.runtime.id, peerIds: PEERS }),
+    };
+  } catch {
+    // Granted a moment ago and gone now, or an API this browser does not have.
+    // Reported as ungranted, because that is the state the page can act on.
+    return { granted: false, others: [] };
+  }
+}
 
 // The toolbar panel's one action. It could call tabs.create itself — the picker
 // does — but then the peer handshake and the OVERRIDE log line would exist in

@@ -144,6 +144,35 @@
         </p>
       </section>
 
+      <!-- Everything the protocol cannot see. The census asks, and an add-on
+           that does not answer is indistinguishable from one that is not
+           installed — which is how a container add-on with a blocking listener
+           and a list of site assignments ran alongside this one for weeks. -->
+      <section id="others" class="state caution" hidden>
+        <h2>Another add-on can route containers</h2>
+        <p class="lead" id="others-line"></p>
+        <ul class="rules" id="others-list"></ul>
+        <p class="note">
+          It does not answer this add-on's protocol, so nothing here can tell what it is doing or
+          what it is doing it to. Two add-ons that both take a request open two tabs for it. If this
+          policy covers the sites it covers, it is the one to switch off.
+        </p>
+      </section>
+
+      <section id="others-ask" hidden>
+        <h2>Look for other container add-ons</h2>
+        <p class="note">
+          An add-on that does not answer the protocol is invisible here. Checking for one needs
+          permission to list what is installed &mdash; Firefox calls it
+          <b>Monitor extension usage and manage themes</b>. It is asked for here rather than at
+          install, it is read once when this page opens, and nothing about it leaves the browser.
+        </p>
+        <div class="choices">
+          <button id="others-button" type="button">Allow it to list add-ons</button>
+        </div>
+        <p class="note" id="others-note"></p>
+      </section>
+
       <section>
         <h2>Policy</h2>
         <p class="url" id="revision">reading…</p>

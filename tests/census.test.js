@@ -19,6 +19,7 @@ import {
   clashLine,
   standDownHosts,
   allStandingDown,
+  silentRouters,
 } from '../src/lib/census.js';
 
 const SELF = { routing: true, routes: ['*.example.com'] };
@@ -454,5 +455,118 @@ describe('a peer that has given way', () => {
     expect(allStandingDown(clashes(SELF, [GAVE_WAY]))).toBe(true);
     expect(allStandingDown([])).toBe(false);
     expect(allStandingDown()).toBe(false);
+  });
+});
+
+// Multi-Account Containers ran beside this add-on for weeks: a blocking
+// listener, a list of site assignments, no protocol, and therefore invisible to
+// every check either side could run. It is found by CAPABILITY and never by
+// name — a list of known ids goes stale the first time somebody installs the
+// next container add-on, and learning one would need a release.
+describe('add-ons that route and never answer', () => {
+  const ext = (over) => ({
+    id: 'other@example.com',
+    name: 'Other',
+    version: '1.0',
+    type: 'extension',
+    enabled: true,
+    permissions: [],
+    hostPermissions: [],
+    ...over,
+  });
+  const WHO = { selfId: 'me@example.com', peerIds: ['peer@example.com'] };
+
+  it('names one that can open tabs in containers', () => {
+    const [found] = silentRouters([ext({ permissions: ['contextualIdentities'] })], WHO);
+    expect(found.name).toBe('Other');
+    expect(found.why).toEqual(['opens tabs in containers']);
+  });
+
+  it('names one that can take a request before it is sent', () => {
+    const [found] = silentRouters(
+      [ext({ permissions: ['webRequestBlocking'], hostPermissions: ['<all_urls>'] })],
+      WHO,
+    );
+    expect(found.why).toEqual(['can take a request before it is sent']);
+  });
+
+  it('says both reasons when both are declared', () => {
+    const [found] = silentRouters(
+      [
+        ext({
+          permissions: ['contextualIdentities', 'webRequestBlocking'],
+          hostPermissions: ['https://*/*'],
+        }),
+      ],
+      WHO,
+    );
+    expect(found.why).toHaveLength(2);
+  });
+
+  it('ignores a blocking listener with nowhere to run', () => {
+    // Measured on a real profile: an add-on whose only host pattern is its own
+    // moz-extension:// origin cannot see a navigation, and reporting it would
+    // be a second router that does not exist.
+    expect(
+      silentRouters(
+        [
+          ext({
+            permissions: ['webRequestBlocking'],
+            hostPermissions: ['moz-extension://00000000-0000-4000-8000-000000000000/*'],
+          }),
+        ],
+        WHO,
+      ),
+    ).toEqual([]);
+  });
+
+  it('ignores a disabled add-on', () => {
+    // It routes nothing. Naming it is the warning people learn to click past,
+    // so that the time it is real it gets clicked past too.
+    expect(
+      silentRouters([ext({ enabled: false, permissions: ['contextualIdentities'] })], WHO),
+    ).toEqual([]);
+  });
+
+  it('ignores this extension and the peers it already asks', () => {
+    // A peer is in the census by name with what it is actually doing. Listing
+    // it twice would say a protocol that works is a problem.
+    const both = [
+      ext({ id: 'me@example.com', permissions: ['contextualIdentities'] }),
+      ext({ id: 'peer@example.com', permissions: ['contextualIdentities'] }),
+    ];
+    expect(silentRouters(both, WHO)).toEqual([]);
+  });
+
+  it('ignores a theme and anything that declares neither', () => {
+    expect(
+      silentRouters([ext({ type: 'theme', permissions: ['contextualIdentities'] })], WHO),
+    ).toEqual([]);
+    expect(silentRouters([ext({ permissions: ['storage', 'tabs'] })], WHO)).toEqual([]);
+  });
+
+  it('answers with an empty list rather than throwing on junk', () => {
+    expect(silentRouters()).toEqual([]);
+    expect(silentRouters([null, 'nope', {}, ext({ id: '' })], WHO)).toEqual([]);
+    expect(silentRouters([ext({ permissions: 'nope', hostPermissions: 7 })], WHO)).toEqual([]);
+  });
+
+  it('names something findable when an add-on names itself badly', () => {
+    const [found] = silentRouters(
+      [ext({ name: '   ', permissions: ['contextualIdentities'] })],
+      WHO,
+    );
+    expect(found.name).toBe('other@example.com');
+  });
+
+  it('sorts by name, because the list is read', () => {
+    const rows = silentRouters(
+      [
+        ext({ id: 'b@example.com', name: 'Zebra', permissions: ['contextualIdentities'] }),
+        ext({ id: 'a@example.com', name: 'Alpha', permissions: ['contextualIdentities'] }),
+      ],
+      WHO,
+    );
+    expect(rows.map((r) => r.name)).toEqual(['Alpha', 'Zebra']);
   });
 });

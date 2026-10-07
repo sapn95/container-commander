@@ -43,3 +43,39 @@ export function requestWatchPermissions(given) {
   if (!p?.request) return Promise.resolve(false);
   return p.request(watchPermissions()).catch(() => false);
 }
+
+/**
+ * The one permission that can see an add-on which does not answer a ping.
+ *
+ * Optional, and it stays optional. Firefox describes `management` as "Monitor
+ * extension usage and manage themes", which is a fair description of an API
+ * that lists every add-on installed — and demanding it at install, from an
+ * extension whose job is routing, would be the trade this project refused on
+ * day one. Granted later, from this add-on's own page, by somebody who has read
+ * what it is for, it is a different bargain: it is the only way to see a
+ * container add-on that holds a blocking listener and speaks no protocol.
+ *
+ * Nothing breaks without it. The census still works, the peers still answer,
+ * and the popup says plainly that an add-on which does not answer is invisible.
+ */
+export function managementPermission() {
+  return { permissions: ['management'] };
+}
+
+/** False on any doubt: a wrong "yes" hides the very state this reports. */
+export async function hasManagementPermission(given) {
+  const p = api(given);
+  if (!p?.contains) return false;
+  try {
+    return await p.contains(managementPermission());
+  } catch {
+    return false;
+  }
+}
+
+/** Must be the FIRST thing in a click handler. See watchPermissions(). */
+export function requestManagementPermission(given) {
+  const p = api(given);
+  if (!p?.request) return Promise.resolve(false);
+  return p.request(managementPermission()).catch(() => false);
+}
